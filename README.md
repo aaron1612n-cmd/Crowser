@@ -11,7 +11,7 @@ Crowser ships as an **unsigned `.ipa`**. SideStore signs it with your own Apple 
 3. Get the file onto your phone (AirDrop, Files, iCloud Drive) and open it with SideStore, or tap **+** in SideStore's My Apps and pick it.
 4. Free Apple IDs need the app refreshed in SideStore every 7 days.
 
-Pushing a tag like `v0.1.0` also attaches the `.ipa` to a GitHub Release, which is easier to grab from a phone.
+Every build of the default branch also publishes the `.ipa` to a GitHub Release (`v` + `MARKETING_VERSION` from `project.yml`), which is easier to grab from a phone: it is the bare `.ipa`, not a zip.
 
 ## What it does
 
