@@ -1,0 +1,9 @@
+*.xcodeproj
+Crowser/Info.plist
+build/
+DerivedData/
+Payload/
+*.ipa
+screenshots/
+.DS_Store
+xcuserdata/
