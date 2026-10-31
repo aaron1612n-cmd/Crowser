@@ -14,7 +14,7 @@ struct ChromeBar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if placement == .bottom { ProgressLine(progress: tab.progress, isLoading: tab.isLoading) }
+            if placement == .bottom { edge }
 
             Group {
                 if placement == .top {
@@ -42,7 +42,7 @@ struct ChromeBar: View {
             }
             .padding(.horizontal, 16)
 
-            if placement == .top { ProgressLine(progress: tab.progress, isLoading: tab.isLoading) }
+            if placement == .top { edge }
         }
         .background(Rookery.soot.ignoresSafeArea(edges: placement == .bottom ? .bottom : .top))
         .environment(\.colorScheme, .dark)
@@ -56,6 +56,16 @@ struct ChromeBar: View {
         .onAppear {
             if tab.url == nil && store.addressFocusRequest > 0 { beginEditing() }
         }
+    }
+
+    /// Feather hairline where the bar meets the page (keeps it distinct in dark mode),
+    /// with the loading line running over it.
+    private var edge: some View {
+        ZStack(alignment: .leading) {
+            Rectangle().fill(Rookery.feather).frame(height: 1)
+            ProgressLine(progress: tab.progress, isLoading: tab.isLoading)
+        }
+        .frame(height: 2)
     }
 
     // MARK: Address
