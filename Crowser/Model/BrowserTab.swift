@@ -22,6 +22,11 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
 
     private var observations: [NSKeyValueObservation] = []
 
+    static let safariUserAgentSuffix: String = {
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        return "Version/\(version.majorVersion).\(version.minorVersion) Mobile/15E148 Safari/604.1"
+    }()
+
     init(url: URL? = nil, isPrivate: Bool = false) {
         self.isPrivate = isPrivate
 
@@ -30,6 +35,9 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = .all
         configuration.defaultWebpagePreferences.preferredContentMode = .recommended
+        // Present as Safari. A bare WKWebView user agent has no "Version/… Safari/…" token, and some sites
+        // and image CDNs then pick formats or markup meant for other browsers, leaving broken-image boxes.
+        configuration.applicationNameForUserAgent = BrowserTab.safariUserAgentSuffix
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.allowsBackForwardNavigationGestures = true
