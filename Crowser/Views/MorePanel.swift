@@ -45,13 +45,9 @@ struct MorePanel: View {
                         ActionTile("Find", symbol: "text.magnifyingglass", enabled: hasPage) {
                             after { tab.findOnPage() }
                         }
-                        ActionTile(
-                            tab.isDesktop ? "Mobile site" : "Desktop site",
-                            symbol: tab.isDesktop ? "iphone" : "desktopcomputer",
-                            enabled: hasPage
-                        ) {
-                            tab.toggleDesktop()
+                        ActionTile("Reopen", symbol: "arrow.uturn.backward", enabled: store.canReopenClosedTab) {
                             dismiss()
+                            store.reopenClosedTab()
                         }
                         ActionTile("New tab", symbol: "plus.square") {
                             dismiss()
@@ -74,6 +70,8 @@ struct MorePanel: View {
                     textSize
                         .opacity(hasPage ? 1 : 0.4)
                         .disabled(!hasPage)
+
+                    if hasPage { thisSite }
 
                     Button {
                         after { store.sheet = .settings }
@@ -152,10 +150,97 @@ struct MorePanel: View {
             .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.card))
         }
 
+        /// Settings Crowser remembers for this website.
+        private var thisSite: some View {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("This site")
+                        .font(Face.title(20))
+                        .foregroundColor(Theme.text)
+                    Spacer()
+                    Text(Address.display(tab.url))
+                        .font(Face.ui(13, weight: .medium))
+                        .foregroundColor(Theme.muted)
+                        .lineLimit(1)
+                }
+                RowGroup {
+                    SwitchRow(
+                        "Game mode",
+                        detail: "No text selection, hold menus, zoom or swipe-back. Full screen, screen stays on.",
+                        symbol: "gamecontroller.fill",
+                        isOn: tab.gameMode
+                    ) {
+                        tab.toggleGameMode()
+                        if tab.gameMode { dismiss() }
+                    }
+                    if tab.gameMode {
+                        SwitchRow("Lock page scrolling", detail: "Dragging only moves the game, never the page.", symbol: "lock.fill", isOn: tab.scrollLocked) {
+                            tab.toggleScrollLock()
+                        }
+                    }
+                    if store.blockTrackers {
+                        SwitchRow("Block ads & trackers here", detail: "Turn off if this site doesn't work right.", symbol: "hand.raised.fill", isOn: !tab.trackersAllowed) {
+                            tab.toggleTrackersAllowed()
+                        }
+                    }
+                    SwitchRow("Desktop version", detail: nil, symbol: "desktopcomputer", isOn: tab.isDesktop) {
+                        tab.toggleDesktop()
+                    }
+                }
+            }
+        }
+
         /// Close the panel first, then act, so the next screen doesn't fight the dismissal.
         private func after(_ action: @escaping () -> Void) {
             dismiss()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: action)
+        }
+    }
+}
+
+private struct SwitchRow: View {
+    let title: String
+    let detail: String?
+    let symbol: String
+    let isOn: Bool
+    let toggle: () -> Void
+
+    init(_ title: String, detail: String?, symbol: String, isOn: Bool, toggle: @escaping () -> Void) {
+        self.title = title
+        self.detail = detail
+        self.symbol = symbol
+        self.isOn = isOn
+        self.toggle = toggle
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(isOn ? .white : Theme.text)
+                .frame(width: 32, height: 32)
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(isOn ? Theme.ember : Theme.line))
+                .animation(Motion.quick, value: isOn)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(Face.ui(16, weight: .semibold))
+                    .foregroundColor(Theme.text)
+                if let detail {
+                    Text(detail)
+                        .font(Face.ui(12))
+                        .foregroundColor(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 8)
+            Toggle(title, isOn: Binding(get: { isOn }, set: { _ in toggle() }))
+                .labelsHidden()
+                .tint(Theme.ember)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Theme.line).frame(height: 1).padding(.leading, 58)
         }
     }
 }

@@ -18,6 +18,9 @@ Every build of the default branch also publishes the `.ipa` to a GitHub Release 
 - A floating bar that folds into a small pill while you scroll. Swipe it sideways to change tabs; long-press the tab counter for quick actions.
 - Tap the address to open a search panel with live suggestions, Paste and go, favorites and history.
 - Tab overview with page previews: tap to switch, swipe a card away to close, reopen closed tabs, private tabs on their own side.
+- Game mode, remembered per site: no text selection, hold-to-copy menus, link previews, zoom, swipe-back or page bounce; optional scroll lock; full screen with a corner button for the bar; the screen stays awake.
+- "This site" settings remembered per site: game mode, desktop version, text size, and ad blocking on or off.
+- Optional hiding of cookie consent popups.
 - Built-in ad and tracker blocking (third-party ad/tracking networks only, so sites keep working).
 - Page panel: share, favorite, find on page, desktop/mobile site, text size, copy link.
 - Long-press links for Open in New Tab / Private Tab / Copy Link. Downloads open the share sheet so you can save to Files.

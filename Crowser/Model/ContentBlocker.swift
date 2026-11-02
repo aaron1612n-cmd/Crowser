@@ -24,6 +24,47 @@ enum ContentBlocker {
         "adsafeprotected.com", "doubleverify.com", "permutive.com", "id5-sync.com", "liadm.com",
     ]
 
+    static let cookieKey = "crowser.hideCookieBanners"
+
+    /// Consent-popup services and the containers they draw into.
+    private static let cookieDomains = [
+        "cookielaw.org", "onetrust.com", "cookiebot.com", "consensu.org", "trustarc.com", "didomi.io",
+        "usercentrics.eu", "privacy-mgmt.com", "cookiepro.com", "iubenda.com", "termly.io", "osano.com",
+        "consentmanager.net", "cookieyes.com", "cookie-script.com", "cookiefirst.com", "civiccomputing.com",
+    ]
+
+    private static let cookieSelectors = [
+        "#onetrust-consent-sdk", "#onetrust-banner-sdk", "#CybotCookiebotDialog", "#CybotCookiebotDialogBodyUnderlay",
+        ".fc-consent-root", "#qc-cmp2-container", "#truste-consent-track", "#didomi-host", "#usercentrics-root",
+        "#cookiescript_injected", ".cky-consent-container", ".cc-window", "#cookie-law-info-bar", "#cmpbox", "#cmpbox2",
+        "div[id^='sp_message_container']", ".osano-cm-window", "#ccc",
+    ]
+
+    static func compileCookieRules() async -> WKContentRuleList? {
+        var rules: [[String: Any]] = cookieDomains.map { domain in
+            [
+                "trigger": ["url-filter": "^https?://[^/]*" + NSRegularExpression.escapedPattern(for: domain)],
+                "action": ["type": "block"],
+            ]
+        }
+        rules.append([
+            "trigger": ["url-filter": ".*"],
+            "action": ["type": "css-display-none", "selector": cookieSelectors.joined(separator: ", ")],
+        ])
+        return await compile(rules, identifier: "crowser.cookies.v1")
+    }
+
+    private static func compile(_ rules: [[String: Any]], identifier: String) async -> WKContentRuleList? {
+        guard let data = try? JSONSerialization.data(withJSONObject: rules),
+              let json = String(data: data, encoding: .utf8) else { return nil }
+        let ruleStore: WKContentRuleListStore? = WKContentRuleListStore.default()
+        let list: WKContentRuleList? = try? await ruleStore?.compileContentRuleList(
+            forIdentifier: identifier,
+            encodedContentRuleList: json
+        )
+        return list
+    }
+
     static func compile() async -> WKContentRuleList? {
         let rules: [[String: Any]] = domains.map { domain in
             [

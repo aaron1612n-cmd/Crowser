@@ -38,13 +38,28 @@ struct SettingsSheet: View {
                     Toggle(isOn: $store.blockTrackers) {
                         row("Block ads & trackers", symbol: "hand.raised")
                     }
+                    Toggle(isOn: $store.hideCookieBanners) {
+                        row("Hide cookie popups", symbol: "checkmark.shield")
+                    }
                     Toggle(isOn: $store.collapseOnScroll) {
                         row("Shrink bar while scrolling", symbol: "arrow.down.right.and.arrow.up.left")
                     }
                 } header: {
                     header("Browsing")
                 } footer: {
-                    Text("Blocks known ad and tracking networks only, so sites keep working.")
+                    Text("Blocks known ad and tracking networks only, so sites keep working. Hiding cookie popups skips consent banners on many sites.")
+                }
+
+                if !store.sites.gameSites.isEmpty {
+                    Section {
+                        ForEach(store.sites.gameSites, id: \.self) { host in
+                            row(host, symbol: "gamecontroller.fill")
+                        }
+                    } header: {
+                        header("Game mode sites")
+                    } footer: {
+                        Text("Turn game mode off from the … menu while on the site.")
+                    }
                 }
 
                 Section {

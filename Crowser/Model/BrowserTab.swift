@@ -29,6 +29,13 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     @Published private(set) var isDesktop: Bool
     @Published private(set) var zoom: CGFloat = 1
     @Published var snapshot: UIImage?
+    /// Game mode: nothing on the page reacts to long-presses, selection, zoom or edge swipes.
+    @Published private(set) var gameMode = false
+    @Published private(set) var scrollLocked = false
+    /// Ad/tracker blocking switched off for this site.
+    @Published private(set) var trackersAllowed = false
+    /// In game mode the bar is hidden until you tap the corner button.
+    @Published var gameBarShown = false
 
     var showsStartPage: Bool { url == nil && !openedByPage }
 
@@ -50,6 +57,8 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     private var downloads: [ObjectIdentifier: URL] = [:]
     /// Restored tabs wait to load until you actually look at them, so launch stays instant.
     private var needsLoad = false
+    /// The site whose remembered settings are currently applied.
+    private var siteKey: String?
 
     init(url: URL? = nil, isPrivate: Bool = false, lazy: Bool = false, configuration: WKWebViewConfiguration? = nil, store: BrowserStore? = nil) {
         self.isPrivate = isPrivate
@@ -82,7 +91,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         webView.scrollView.alwaysBounceVertical = false
 
         observe()
-        if let rules = store?.contentRules { webView.configuration.userContentController.add(rules) }
+        refreshContentRules()
         if let url {
             if lazy {
                 self.url = url
@@ -155,6 +164,8 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     func toggleDesktop() {
         isDesktop.toggle()
         webView.customUserAgent = isDesktop ? Self.desktopAgent : nil
+        let desktop = isDesktop
+        store?.sites.update(url) { $0.desktop = desktop }
         if url != nil { webView.reload() }
         Haptics.select()
     }
@@ -162,15 +173,126 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     func stepZoom(_ direction: Int) {
         let current = Self.zoomSteps.firstIndex { $0 >= zoom - 0.001 } ?? 3
         let next = min(max(current + direction, 0), Self.zoomSteps.count - 1)
-        zoom = Self.zoomSteps[next]
-        webView.pageZoom = zoom
+        setZoom(Self.zoomSteps[next])
         Haptics.select()
     }
 
     func resetZoom() {
-        zoom = 1
-        webView.pageZoom = 1
+        setZoom(1)
     }
+
+    private func setZoom(_ value: CGFloat) {
+        zoom = value
+        webView.pageZoom = value
+        store?.sites.update(url) { $0.zoom = value == 1 ? nil : Double(value) }
+    }
+
+    // MARK: Per-site settings
+
+    /// Applies what was remembered for the site a navigation is heading to.
+    func applySiteSettings(for target: URL?) {
+        guard let store else { return }
+        siteKey = SiteSettings.key(for: target)
+        let setting = store.sites.setting(for: target)
+
+        let wantDesktop = setting.desktop ?? (UIDevice.current.userInterfaceIdiom == .pad)
+        if wantDesktop != isDesktop {
+            isDesktop = wantDesktop
+            webView.customUserAgent = wantDesktop ? Self.desktopAgent : nil
+        }
+        if trackersAllowed != setting.allowTrackers {
+            trackersAllowed = setting.allowTrackers
+            refreshContentRules()
+        }
+        zoom = CGFloat(setting.zoom ?? 1)
+        setGame(setting.game, lock: setting.lockScroll, freshPage: true)
+    }
+
+    func refreshContentRules() {
+        let controller = webView.configuration.userContentController
+        controller.removeAllContentRuleLists()
+        guard let store else { return }
+        if store.blockTrackers && !trackersAllowed, let rules = store.contentRules { controller.add(rules) }
+        if store.hideCookieBanners, let rules = store.cookieRules { controller.add(rules) }
+    }
+
+    func toggleTrackersAllowed() {
+        trackersAllowed.toggle()
+        let allowed = trackersAllowed
+        store?.sites.update(url) { $0.allowTrackers = allowed }
+        refreshContentRules()
+        if url != nil { webView.reload() }
+        Haptics.select()
+    }
+
+    // MARK: Game mode
+
+    func toggleGameMode() {
+        guard url != nil else { return }
+        let on = !gameMode
+        store?.sites.update(url) { $0.game = on }
+        let lock = store?.sites.setting(for: url).lockScroll ?? true
+        setGame(on, lock: lock, freshPage: false)
+        // Styles added to the current page can't be taken back cleanly, so turning off reloads it.
+        if !on { webView.reload() }
+        Haptics.thud()
+    }
+
+    func toggleScrollLock() {
+        let lock = !scrollLocked
+        store?.sites.update(url) { $0.lockScroll = lock }
+        setGame(gameMode, lock: lock, freshPage: false)
+        Haptics.select()
+    }
+
+    private func setGame(_ on: Bool, lock: Bool, freshPage: Bool) {
+        let turningOn = on && !gameMode
+        gameMode = on
+        scrollLocked = on && lock
+        webView.allowsLinkPreview = !on
+        webView.allowsBackForwardNavigationGestures = !on
+        let scrollView = webView.scrollView
+        scrollView.bounces = !on
+        scrollView.pinchGestureRecognizer?.isEnabled = !on
+        scrollView.isScrollEnabled = !(on && lock)
+
+        let controller = webView.configuration.userContentController
+        controller.removeAllUserScripts()
+        if on {
+            controller.addUserScript(WKUserScript(source: Self.gameScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false))
+            if turningOn && !freshPage { webView.evaluateJavaScript(Self.gameScript, completionHandler: nil) }
+            setCollapsed(false)
+        } else {
+            gameBarShown = false
+        }
+    }
+
+    /// Turns off text selection, the long-press callout, tap highlights, double-tap zoom and pinch zoom.
+    private static let gameScript = #"""
+    (function () {
+      if (window.__crowserGame) return;
+      window.__crowserGame = true;
+      var css = '*:not(input):not(textarea):not([contenteditable]){-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important}'
+        + '*{-webkit-tap-highlight-color:transparent!important}'
+        + 'html,body{touch-action:manipulation;overscroll-behavior:none!important}';
+      var style = document.createElement('style');
+      style.id = 'crowser-game';
+      style.textContent = css;
+      (document.head || document.documentElement).appendChild(style);
+      var meta = document.querySelector('meta[name=viewport]');
+      if (meta) {
+        var content = meta.getAttribute('content') || '';
+        if (content.indexOf('user-scalable') < 0) meta.setAttribute('content', content + ',maximum-scale=1,user-scalable=no');
+      }
+      document.addEventListener('contextmenu', function (e) { e.preventDefault(); }, { capture: true });
+      document.addEventListener('selectstart', function (e) {
+        var t = e.target;
+        var editable = t && (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName || ''));
+        if (!editable) e.preventDefault();
+      }, { capture: true });
+    })();
+    """#
+
 
     func findOnPage() {
         webView.findInteraction?.presentFindNavigator(showingReplace: false)
@@ -184,12 +306,6 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         if let image = try? await webView.takeSnapshot(configuration: configuration) {
             snapshot = image
         }
-    }
-
-    func setContentRules(_ rules: WKContentRuleList?, enabled: Bool) {
-        let controller = webView.configuration.userContentController
-        controller.removeAllContentRuleLists()
-        if enabled, let rules { controller.add(rules) }
     }
 
     // MARK: Bar collapse while scrolling
@@ -262,6 +378,12 @@ extension BrowserTab: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         preferences: WKWebpagePreferences
     ) async -> (WKNavigationActionPolicy, WKWebpagePreferences) {
+        if navigationAction.targetFrame?.isMainFrame ?? true,
+           let target = navigationAction.request.url,
+           target.scheme?.hasPrefix("http") == true,
+           SiteSettings.key(for: target) != siteKey {
+            applySiteSettings(for: target)
+        }
         preferences.preferredContentMode = isDesktop ? .desktop : .mobile
         if navigationAction.shouldPerformDownload { return (.download, preferences) }
         guard let url = navigationAction.request.url, let scheme = url.scheme?.lowercased() else {
@@ -301,6 +423,7 @@ extension BrowserTab: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         loadError = nil
+        if webView.pageZoom != zoom { webView.pageZoom = zoom }
         setCollapsed(false)
         sync()
     }
@@ -373,6 +496,7 @@ extension BrowserTab: WKUIDelegate {
         _ webView: WKWebView,
         contextMenuConfigurationForElement elementInfo: WKContextMenuElementInfo
     ) async -> UIContextMenuConfiguration? {
+        if gameMode { return nil }
         let link = elementInfo.linkURL
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] suggested in
             guard let link, let tab = self else { return UIMenu(children: suggested) }

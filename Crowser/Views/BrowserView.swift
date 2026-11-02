@@ -62,11 +62,13 @@ private struct TabStage: View {
             // The page and the bar sit one above the other; the bar never covers the page.
             // (Covering it meant padding every page, which made pages that should stay still scrollable.)
             VStack(spacing: 0) {
-                if barOnTop { barSlot }
+                if barOnTop && !tab.gameMode { barSlot }
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if !barOnTop { barSlot }
+                if !barOnTop && !tab.gameMode { barSlot }
             }
+
+            if tab.gameMode { gameOverlay }
 
             if store.isEditingAddress {
                 AddressEditor(tab: tab, barOnTop: barOnTop, morph: morph)
@@ -75,6 +77,42 @@ private struct TabStage: View {
             }
         }
         .task(id: tab.id) { tab.activate() }
+        .statusBarHidden(tab.gameMode)
+        .persistentSystemOverlays(tab.gameMode ? .hidden : .automatic)
+        .animation(Motion.snappy, value: tab.gameMode)
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = tab.gameMode }
+        .onChange(of: tab.gameMode) { on in UIApplication.shared.isIdleTimerDisabled = on }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+    }
+
+    /// Game mode: the page gets the whole screen. A small corner button brings the bar back.
+    private var gameOverlay: some View {
+        ZStack(alignment: barOnTop ? .top : .bottom) {
+            Color.clear.allowsHitTesting(false)
+            if tab.gameBarShown && !store.isEditingAddress {
+                FloatingBar(tab: tab, barOnTop: barOnTop, morph: morph)
+                    .padding(barOnTop ? .top : .bottom, 8)
+                    .transition(.move(edge: barOnTop ? .top : .bottom).combined(with: .opacity))
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            Button {
+                Haptics.tap()
+                withAnimation(Motion.snappy) { tab.gameBarShown.toggle() }
+            } label: {
+                Image(systemName: tab.gameBarShown ? "xmark" : "gamecontroller.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(Theme.onInk)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(Theme.bar.opacity(0.6)))
+                    .frame(width: 48, height: 48)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(PressStyle())
+            .padding(.trailing, 8)
+            .padding(.top, barOnTop && tab.gameBarShown ? 70 : 6)
+            .accessibilityLabel(tab.gameBarShown ? "Hide toolbar" : "Show toolbar")
+        }
     }
 
     private var barSlot: some View {

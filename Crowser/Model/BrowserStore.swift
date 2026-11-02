@@ -26,12 +26,20 @@ final class BrowserStore: ObservableObject {
     @Published var blockTrackers: Bool {
         didSet {
             UserDefaults.standard.set(blockTrackers, forKey: ContentBlocker.storageKey)
-            tabs.forEach { $0.setContentRules(contentRules, enabled: blockTrackers) }
+            tabs.forEach { $0.refreshContentRules() }
+        }
+    }
+    @Published var hideCookieBanners: Bool {
+        didSet {
+            UserDefaults.standard.set(hideCookieBanners, forKey: ContentBlocker.cookieKey)
+            tabs.forEach { $0.refreshContentRules() }
         }
     }
 
     let library: Library
+    let sites = SiteSettings()
     private(set) var contentRules: WKContentRuleList?
+    private(set) var cookieRules: WKContentRuleList?
 
     private let tabsKey = "crowser.tabs"
     private let selectedKey = "crowser.selectedTab"
@@ -46,6 +54,7 @@ final class BrowserStore: ObservableObject {
         collapseOnScroll = defaults.object(forKey: "crowser.collapseOnScroll") as? Bool ?? true
         suggestionsEnabled = defaults.object(forKey: "crowser.suggestions") as? Bool ?? true
         blockTrackers = ContentBlocker.isEnabled
+        hideCookieBanners = defaults.bool(forKey: ContentBlocker.cookieKey)
 
         if defaults.bool(forKey: "crowserSeed") { library.seedDemo() }
         if !defaults.bool(forKey: "crowserFresh") { restore() }
@@ -89,7 +98,6 @@ final class BrowserStore: ObservableObject {
     /// A page asked for a new window; WebKit loads into the web view we hand back.
     func openPopup(configuration: WKWebViewConfiguration, from opener: BrowserTab) -> WKWebView {
         let tab = BrowserTab(isPrivate: opener.isPrivate, configuration: configuration, store: self)
-        tab.setContentRules(contentRules, enabled: blockTrackers)
         if let index = tabs.firstIndex(where: { $0.id == opener.id }) {
             tabs.insert(tab, at: index + 1)
         } else {
@@ -220,7 +228,8 @@ final class BrowserStore: ObservableObject {
 
     private func loadContentRules() async {
         contentRules = await ContentBlocker.compile()
-        tabs.forEach { $0.setContentRules(contentRules, enabled: blockTrackers) }
+        cookieRules = await ContentBlocker.compileCookieRules()
+        tabs.forEach { $0.refreshContentRules() }
     }
 
     // MARK: Persistence
