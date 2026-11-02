@@ -53,7 +53,8 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         self.isPrivate = isPrivate
         self.openedByPage = configuration != nil
         self.store = store
-        self.isDesktop = UIDevice.current.userInterfaceIdiom == .pad
+        let desktop = UIDevice.current.userInterfaceIdiom == .pad
+        self.isDesktop = desktop
 
         let configuration = configuration ?? Self.makeConfiguration(isPrivate: isPrivate)
         configuration.applicationNameForUserAgent = Self.safariSuffix
@@ -66,7 +67,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         webView.scrollView.backgroundColor = Theme.paperUI
         webView.isFindInteractionEnabled = true
         if #available(iOS 16.4, *) { webView.isInspectable = true }
-        if isDesktop { webView.customUserAgent = Self.desktopAgent }
+        if desktop { webView.customUserAgent = Self.desktopAgent }
         self.webView = webView
 
         super.init()
