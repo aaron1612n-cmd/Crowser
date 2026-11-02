@@ -36,6 +36,9 @@ final class BrowserStore: ObservableObject {
     private let tabsKey = "crowser.tabs"
     private let selectedKey = "crowser.selectedTab"
     private var toastTask: Task<Void, Never>?
+    /// Pages from recently closed (non-private) tabs, newest last.
+    @Published private(set) var closedPages: [URL] = []
+    var canReopenClosedTab: Bool { !closedPages.isEmpty }
 
     init(library: Library) {
         self.library = library
@@ -122,6 +125,10 @@ final class BrowserStore: ObservableObject {
     func close(_ tab: BrowserTab) {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         tab.stop()
+        if !tab.isPrivate, let page = tab.webView.url ?? tab.url {
+            closedPages.append(page)
+            if closedPages.count > 20 { closedPages.removeFirst() }
+        }
         tabs.remove(at: index)
         if tabs.isEmpty {
             newTab(focus: false)
@@ -129,6 +136,12 @@ final class BrowserStore: ObservableObject {
             selectedID = tabs[max(0, index - 1)].id
         }
         persist()
+    }
+
+    func reopenClosedTab() {
+        guard let page = closedPages.popLast() else { return }
+        newTab(url: page, focus: false)
+        Haptics.tap()
     }
 
     func closeCurrent() {
@@ -224,7 +237,7 @@ final class BrowserStore: ObservableObject {
     private func restore() {
         let links = UserDefaults.standard.stringArray(forKey: tabsKey) ?? []
         for link in links {
-            tabs.append(BrowserTab(url: URL(string: link), store: self))
+            tabs.append(BrowserTab(url: URL(string: link), lazy: true, store: self))
         }
         let selected = UserDefaults.standard.integer(forKey: selectedKey)
         selectedID = tabs.indices.contains(selected) ? tabs[selected].id : tabs.last?.id

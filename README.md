@@ -15,20 +15,26 @@ Every build of the default branch also publishes the `.ipa` to a GitHub Release 
 
 ## What it does
 
-- Tabs, including private tabs that keep nothing (separate, in-memory website data).
-- One bar for addresses and searches; DuckDuckGo by default, or Google, Startpage, Bing.
-- Bookmarks ("Roost") and history ("Lately"), with suggestions as you type.
-- Pull to refresh, swipe back and forward, share sheet, links that open new windows open new tabs.
-- Phone: the bar sits at the bottom under your thumb. iPad: one row on top, with keyboard shortcuts:
-  ⌘T new tab, ⇧⌘N private tab, ⌘W close, ⌘L address, ⌘R reload, ⌘[ / ⌘] back and forward,
-  ⌘D bookmark, ⌘Y library, ⇧⌘\ tabs, ⇧⌘[ / ⇧⌘] switch tabs.
-- Light and dark appearance.
+- A floating bar that folds into a small pill while you scroll. Swipe it sideways to change tabs; long-press the tab counter for quick actions.
+- Tap the address to open a search panel with live suggestions, Paste and go, favorites and history.
+- Tab overview with page previews: tap to switch, swipe a card away to close, reopen closed tabs, private tabs on their own side.
+- Built-in ad and tracker blocking (third-party ad/tracking networks only, so sites keep working).
+- Page panel: share, favorite, find on page, desktop/mobile site, text size, copy link.
+- Long-press links for Open in New Tab / Private Tab / Copy Link. Downloads open the share sheet so you can save to Files.
+- Works with sign-in popups, site alerts, camera/microphone/location prompts and saving images.
+- Restored tabs load only when you look at them, so launch is instant.
+- iPhone: bar at the bottom. iPad: bar on top, with keyboard shortcuts
+  (⌘T, ⇧⌘N, ⌘W, ⇧⌘T reopen, ⌘L, ⌘R, ⌘[ ⌘], ⌘D, ⌘F, ⌘Y, ⇧⌘\\, ⇧⌘[ ⇧⌘]).
 
 ## Look
 
-The palette is called **Rookery**: soot `#15130F`, bone `#EEE7D7`, feather `#2A2722`, ash `#8A8476`,
-and a single accent, ember `#D9481C`. Names and numbers are set in New York (Apple's serif); addresses
-and labels in SF Mono. The only animation is the ember line that runs along the bar while a page loads.
+Warm paper `#F4F0E8`, a crow-black floating bar `#171614` (charcoal `#2B2926` at night), and one accent, ember `#E2531F`.
+Titles are set in New York, everything you touch in SF Rounded. Motion uses one family of springs.
+
+## Speed, honestly
+
+Every iOS browser must use Apple's WebKit engine, the same one inside Safari, so page rendering itself can't beat Safari.
+Crowser feels faster by not loading ad and tracking scripts, by restoring tabs lazily, and by caching icons and suggestions.
 
 ## Building
 

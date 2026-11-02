@@ -73,6 +73,7 @@ private struct TabStage: View {
             }
         }
         .onAppear { tab.setBottomInset(barOnTop ? 0 : Self.barClearance) }
+        .task(id: tab.id) { tab.activate() }
         .onChange(of: barOnTop) { onTop in tab.setBottomInset(onTop ? 0 : Self.barClearance) }
     }
 
@@ -105,7 +106,7 @@ private struct ToastView: View {
                     .foregroundColor(Theme.onInk)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
-                    .background(Capsule().fill(Theme.ink))
+                    .background(Capsule().fill(Theme.bar))
                     .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .accessibilityAddTraits(.updatesFrequently)

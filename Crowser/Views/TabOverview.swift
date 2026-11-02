@@ -39,6 +39,7 @@ struct TabOverview: View {
 
             footer
         }
+        .calmScroll()
         .background(Theme.paper.ignoresSafeArea())
         .onAppear { privateMode = store.current?.isPrivate ?? false }
     }
@@ -53,6 +54,18 @@ struct TabOverview: View {
                 .font(Face.ui(17, weight: .semibold))
                 .foregroundColor(Theme.muted)
             Spacer()
+            if store.canReopenClosedTab && !privateMode {
+                Button {
+                    Haptics.tap()
+                    store.reopenClosedTab()
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Theme.muted)
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Reopen closed tab")
+            }
             if !tabs.isEmpty {
                 Menu {
                     Button(role: .destructive) {
@@ -96,9 +109,9 @@ struct TabOverview: View {
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(Theme.onInk)
+                    .foregroundColor(.white)
                     .frame(width: 50, height: 50)
-                    .background(Circle().fill(Theme.ink))
+                    .background(Circle().fill(Theme.ember))
             }
             .buttonStyle(PressStyle())
             .accessibilityLabel(privateMode ? "New private tab" : "New tab")
@@ -150,7 +163,7 @@ private struct ModeSwitch: View {
             .frame(height: 38)
             .background {
                 if active {
-                    Capsule().fill(Theme.ink).matchedGeometryEffect(id: "thumb", in: thumb)
+                    Capsule().fill(Theme.bar).matchedGeometryEffect(id: "thumb", in: thumb)
                 }
             }
             .contentShape(Capsule())

@@ -43,7 +43,8 @@ struct FloatingBar: View {
         .padding(6)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Theme.ink)
+                .fill(Theme.bar)
+                .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Theme.barEdge, lineWidth: 1))
                 .matchedGeometryEffect(id: "bar", in: morph)
                 .shadow(color: .black.opacity(0.22), radius: 18, x: 0, y: 8)
         )
@@ -86,7 +87,7 @@ struct FloatingBar: View {
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Theme.inkRaised)
+                .fill(Theme.barRaised)
                 .matchedGeometryEffect(id: "field", in: morph)
         )
         .offset(x: swipe)
@@ -161,6 +162,8 @@ struct FloatingBar: View {
         } label: {
             Text(store.tabs.count > 99 ? "∞" : "\(store.tabs.count)")
                 .font(Face.ui(13, weight: .bold))
+                .contentTransition(.numericText())
+                .animation(Motion.snappy, value: store.tabs.count)
                 .foregroundColor(Theme.onInk)
                 .frame(width: 24, height: 24)
                 .overlay(
@@ -171,6 +174,15 @@ struct FloatingBar: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
+        .contextMenu {
+            Button { store.newTab() } label: { Label("New Tab", systemImage: "plus.square.on.square") }
+            Button { store.newTab(isPrivate: true) } label: { Label("New Private Tab", systemImage: "eye.slash") }
+            if store.canReopenClosedTab {
+                Button { store.reopenClosedTab() } label: { Label("Reopen Closed Tab", systemImage: "arrow.uturn.backward") }
+            }
+            Divider()
+            Button(role: .destructive) { store.closeCurrent() } label: { Label("Close This Tab", systemImage: "xmark") }
+        }
         .accessibilityLabel("Tabs, \(store.tabs.count) open")
     }
 
@@ -208,7 +220,8 @@ struct FloatingBar: View {
             .frame(height: 34)
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(Theme.ink)
+                    .fill(Theme.bar)
+                    .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Theme.barEdge, lineWidth: 1))
                     .matchedGeometryEffect(id: "bar", in: morph)
                     .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 5)
             )

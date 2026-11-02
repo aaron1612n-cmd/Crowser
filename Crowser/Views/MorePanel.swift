@@ -100,6 +100,7 @@ struct MorePanel: View {
                 .padding(.top, 22)
                 .padding(.bottom, 20)
             }
+            .calmScroll()
             .background(Theme.paper.ignoresSafeArea())
         }
 

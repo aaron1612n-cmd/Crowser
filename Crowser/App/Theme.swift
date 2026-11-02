@@ -11,6 +11,13 @@ enum Theme {
 
     static let ember = Color(uiColor: .hex(0xE2531F))
 
+    /// The floating bar: crow-black on light pages, lifted to charcoal at night so it never vanishes.
+    static let bar = adaptive(light: 0x171614, dark: 0x2B2926)
+    static let barRaised = adaptive(light: 0x2C2A27, dark: 0x3C3935)
+    static let barEdge = Color(uiColor: UIColor {
+        $0.userInterfaceStyle == .dark ? .hex(0xFFFFFF, alpha: 0.10) : .hex(0xFFFFFF, alpha: 0.0)
+    })
+
     /// Page ground.
     static let paper = adaptive(light: 0xF4F0E8, dark: 0x100F0E)
     /// Raised surfaces on paper: rows, tiles, cards.
@@ -91,6 +98,21 @@ struct PressStyle: ButtonStyle {
             .opacity(configuration.isPressed ? 0.85 : 1)
             .animation(Motion.quick, value: configuration.isPressed)
     }
+}
+
+/// Scroll views only bounce when there is something to scroll.
+struct CalmScroll: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 16.4, *) {
+            content.scrollBounceBehavior(.basedOnSize)
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func calmScroll() -> some View { modifier(CalmScroll()) }
 }
 
 /// Section title used on the start page and in sheets.

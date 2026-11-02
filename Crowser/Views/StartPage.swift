@@ -17,6 +17,8 @@ struct StartPage: View {
             VStack(alignment: .leading, spacing: 30) {
                 masthead
 
+                searchCard
+
                 if isPrivate { privateNote }
 
                 if !library.bookmarks.isEmpty {
@@ -47,6 +49,7 @@ struct StartPage: View {
             .offset(y: appeared ? 0 : 14)
         }
         .scrollDismissesKeyboard(.interactively)
+        .calmScroll()
         .background(Theme.paper)
         .onAppear { withAnimation(Motion.soft) { appeared = true } }
     }
@@ -72,6 +75,37 @@ struct StartPage: View {
         }
     }
 
+    /// A big, thumb-friendly way in: tapping it opens the address panel.
+    private var searchCard: some View {
+        Button {
+            Haptics.tap()
+            store.beginEditing()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: isPrivate ? "eye.slash.fill" : "magnifyingglass")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundColor(isPrivate ? Theme.ember : Theme.onInkMuted)
+                Text(isPrivate ? "Search privately" : "Search or enter address")
+                    .font(Face.ui(17, weight: .semibold))
+                    .foregroundColor(Theme.onInkMuted)
+                Spacer()
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(Theme.ember)
+            }
+            .padding(.horizontal, 18)
+            .frame(height: 58)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Theme.bar)
+                    .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Theme.barEdge, lineWidth: 1))
+            )
+            .shadow(color: .black.opacity(0.12), radius: 14, y: 6)
+        }
+        .buttonStyle(PressStyle(scale: 0.98))
+        .accessibilityLabel("Search or enter address")
+    }
+
     private var privateNote: some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: "eye.slash.fill")
@@ -90,7 +124,7 @@ struct StartPage: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.ink))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.bar))
     }
 
     private static var greeting: String {
@@ -135,7 +169,7 @@ struct ErrorPage: View {
                     .foregroundColor(Theme.onInk)
                     .padding(.horizontal, 22)
                     .frame(height: 46)
-                    .background(Capsule().fill(Theme.ink))
+                    .background(Capsule().fill(Theme.bar))
             }
             .buttonStyle(PressStyle())
             .padding(.top, 6)

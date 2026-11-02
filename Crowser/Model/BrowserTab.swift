@@ -48,8 +48,10 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     private var observations: [NSKeyValueObservation] = []
     private var scrollRun: CGFloat = 0
     private var downloads: [ObjectIdentifier: URL] = [:]
+    /// Restored tabs wait to load until you actually look at them, so launch stays instant.
+    private var needsLoad = false
 
-    init(url: URL? = nil, isPrivate: Bool = false, configuration: WKWebViewConfiguration? = nil, store: BrowserStore? = nil) {
+    init(url: URL? = nil, isPrivate: Bool = false, lazy: Bool = false, configuration: WKWebViewConfiguration? = nil, store: BrowserStore? = nil) {
         self.isPrivate = isPrivate
         self.openedByPage = configuration != nil
         self.store = store
@@ -66,6 +68,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         webView.backgroundColor = Theme.paperUI
         webView.scrollView.backgroundColor = Theme.paperUI
         webView.isFindInteractionEnabled = true
+        webView.scrollView.alwaysBounceHorizontal = false
         if #available(iOS 16.4, *) { webView.isInspectable = true }
         if desktop { webView.customUserAgent = Self.desktopAgent }
         self.webView = webView
@@ -81,7 +84,21 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
 
         observe()
         if let rules = store?.contentRules { webView.configuration.userContentController.add(rules) }
-        if let url { load(url) }
+        if let url {
+            if lazy {
+                self.url = url
+                needsLoad = true
+            } else {
+                load(url)
+            }
+        }
+    }
+
+    /// Loads a restored tab the first time it comes on screen.
+    func activate() {
+        guard needsLoad, let url else { return }
+        needsLoad = false
+        load(url)
     }
 
     private static func makeConfiguration(isPrivate: Bool) -> WKWebViewConfiguration {
@@ -168,7 +185,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     func captureSnapshot() async {
         guard url != nil, webView.window != nil else { return }
         let configuration = WKSnapshotConfiguration()
-        configuration.afterScreenUpdates = false
+        configuration.afterScreenUpdates = true
         configuration.snapshotWidth = NSNumber(value: 420)
         if let image = try? await webView.takeSnapshot(configuration: configuration) {
             snapshot = image

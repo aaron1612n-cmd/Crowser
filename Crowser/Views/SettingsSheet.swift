@@ -116,7 +116,7 @@ struct SettingsSheet: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(Theme.onInk)
                 .frame(width: 30, height: 30)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink))
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.bar))
             Text(title)
                 .font(Face.ui(16, weight: .medium))
                 .foregroundColor(Theme.text)

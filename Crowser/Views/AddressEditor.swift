@@ -71,6 +71,19 @@ struct AddressEditor: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Clear")
+                } else {
+                    // System paste button: pastes without the "allow paste" prompt.
+                    PasteButton(payloadType: String.self) { strings in
+                        guard let text = strings.first else { return }
+                        DispatchQueue.main.async {
+                            focused = false
+                            store.open(text)
+                        }
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonBorderShape(.capsule)
+                    .tint(Theme.barRaised)
+                    .accessibilityLabel("Paste and go")
                 }
             }
             .padding(.leading, 14)
@@ -78,7 +91,7 @@ struct AddressEditor: View {
             .frame(height: 48)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Theme.ink)
+                    .fill(Theme.bar)
                     .matchedGeometryEffect(id: "field", in: morph)
             )
 
@@ -149,6 +162,7 @@ struct AddressEditor: View {
             .frame(maxWidth: .infinity)
         }
         .scrollDismissesKeyboard(.interactively)
+        .calmScroll()
     }
 
     private var resolvesToAddress: Bool {

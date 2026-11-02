@@ -16,6 +16,12 @@ enum ContentBlocker {
         "moatads.com", "adsrvr.org", "casalemedia.com", "33across.com", "sharethrough.com", "teads.tv",
         "smartadserver.com", "yieldmo.com", "bidswitch.net", "indexww.com", "hotjar.com", "mouseflow.com",
         "advertising.com", "adform.net", "serving-sys.com", "zemanta.com", "revcontent.com", "mgid.com",
+        "google-analytics.com", "googletagservices.com", "connect.facebook.net", "ads-twitter.com",
+        "analytics.tiktok.com", "bat.bing.com", "clarity.ms", "segment.io", "mixpanel.com", "amplitude.com",
+        "nr-data.net", "chartbeat.com", "chartbeat.net", "parsely.com", "quantcount.com", "krxd.net",
+        "bluekai.com", "demdex.net", "everesttech.net", "rlcdn.com", "agkn.com", "tapad.com", "lijit.com",
+        "sovrn.com", "gumgum.com", "triplelift.com", "contextweb.com", "spotxchange.com", "springserve.com",
+        "adsafeprotected.com", "doubleverify.com", "permutive.com", "id5-sync.com", "liadm.com",
     ]
 
     static func compile() async -> WKContentRuleList? {
@@ -32,7 +38,7 @@ enum ContentBlocker {
               let json = String(data: data, encoding: .utf8) else { return nil }
         let ruleStore: WKContentRuleListStore? = WKContentRuleListStore.default()
         let list: WKContentRuleList? = try? await ruleStore?.compileContentRuleList(
-            forIdentifier: "crowser.blocklist.v1",
+            forIdentifier: "crowser.blocklist.v2",
             encodedContentRuleList: json
         )
         return list

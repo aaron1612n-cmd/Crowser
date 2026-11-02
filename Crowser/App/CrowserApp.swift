@@ -6,6 +6,8 @@ struct CrowserApp: App {
     @StateObject private var store: BrowserStore
 
     init() {
+        // A roomier shared cache keeps favicons and suggestions instant after the first load.
+        URLCache.shared = URLCache(memoryCapacity: 24 * 1024 * 1024, diskCapacity: 150 * 1024 * 1024)
         let library = Library()
         _library = StateObject(wrappedValue: library)
         _store = StateObject(wrappedValue: BrowserStore(library: library))
@@ -26,6 +28,8 @@ struct CrowserApp: App {
                     .keyboardShortcut("n", modifiers: [.command, .shift])
                 Button("Close Tab") { store.closeCurrent() }
                     .keyboardShortcut("w")
+                Button("Reopen Closed Tab") { store.reopenClosedTab() }
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
             }
             CommandMenu("Navigate") {
                 Button("Open Location") { store.beginEditing() }
