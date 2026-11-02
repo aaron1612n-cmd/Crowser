@@ -44,7 +44,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             build | tee build.log | grep -E "error:|warning: .*Crowser/|BUILD (SUCCEEDED|FAILED)" || true
-          test -d build/Build/Products/Release-iphoneos/Crowser.app
+          grep -q "BUILD SUCCEEDED" build.log
 
       - name: Package .ipa
         run: |
@@ -107,8 +107,8 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build-sim \
             CODE_SIGNING_ALLOWED=NO \
-            build | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
-          test -d build-sim/Build/Products/Debug-iphonesimulator/Crowser.app
+            build | tee build-sim.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" build-sim.log
 
       - name: Capture
         run: scripts/screenshots.sh build-sim/Build/Products/Debug-iphonesimulator/Crowser.app screenshots

@@ -186,7 +186,7 @@ private struct TabCard: View {
             .padding(.horizontal, 4)
         }
         .offset(x: dragX)
-        .opacity(1 - min(abs(dragX) / 260, 0.7))
+        .opacity(1.0 - min(Double(abs(dragX)) / 260.0, 0.7))
         .rotationEffect(.degrees(Double(dragX) / 40))
         .contentShape(Rectangle())
         .onTapGesture {
