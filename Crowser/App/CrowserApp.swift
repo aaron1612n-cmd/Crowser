@@ -16,7 +16,7 @@ struct CrowserApp: App {
             BrowserView()
                 .environmentObject(store)
                 .environmentObject(library)
-                .tint(Rookery.ember)
+                .tint(Theme.ember)
         }
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -28,7 +28,7 @@ struct CrowserApp: App {
                     .keyboardShortcut("w")
             }
             CommandMenu("Navigate") {
-                Button("Open Location") { store.focusAddress() }
+                Button("Open Location") { store.beginEditing() }
                     .keyboardShortcut("l")
                 Button("Reload") { store.current?.reload() }
                     .keyboardShortcut("r")
@@ -36,13 +36,15 @@ struct CrowserApp: App {
                     .keyboardShortcut("[")
                 Button("Forward") { store.current?.goForward() }
                     .keyboardShortcut("]")
-                Button("Bookmark Page") { store.toggleBookmarkForCurrent() }
+                Button("Add to Favorites") { store.toggleBookmarkForCurrent() }
                     .keyboardShortcut("d")
                 Divider()
-                Button("Show Tabs") { store.sheet = .tabs }
+                Button("Show Tabs") { store.showOverview() }
                     .keyboardShortcut("\\", modifiers: [.command, .shift])
                 Button("Show Library") { store.sheet = .library }
                     .keyboardShortcut("y")
+                Button("Find on Page") { store.current?.findOnPage() }
+                    .keyboardShortcut("f")
                 Button("Next Tab") { store.selectAdjacent(1) }
                     .keyboardShortcut("]", modifiers: [.command, .shift])
                 Button("Previous Tab") { store.selectAdjacent(-1) }

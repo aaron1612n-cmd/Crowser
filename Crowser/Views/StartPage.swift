@@ -1,158 +1,148 @@
 import SwiftUI
 
-/// What a blank tab shows: the wordmark, the roost (bookmarks) and what you read lately.
+/// A new tab: greeting, favorites as icon tiles, and recent pages on a card.
 struct StartPage: View {
     let isPrivate: Bool
+    let bottomClearance: CGFloat
 
     @EnvironmentObject private var store: BrowserStore
     @EnvironmentObject private var library: Library
     @Environment(\.horizontalSizeClass) private var horizontalSize
+    @State private var appeared = false
 
     private var wide: Bool { horizontalSize == .regular }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 30) {
                 masthead
-                    .padding(.bottom, wide ? 56 : 36)
 
-                if wide {
-                    HStack(alignment: .top, spacing: 48) {
-                        roost.frame(maxWidth: .infinity, alignment: .topLeading)
-                        lately.frame(maxWidth: .infinity, alignment: .topLeading)
+                if isPrivate { privateNote }
+
+                if !library.bookmarks.isEmpty {
+                    VStack(alignment: .leading, spacing: 14) {
+                        SectionTitle("Favorites")
+                        FavoritesGrid(entries: Array(library.bookmarks.prefix(wide ? 16 : 12))) { store.open($0.url) }
                     }
-                } else {
-                    VStack(alignment: .leading, spacing: 40) {
-                        roost
-                        lately
+                }
+
+                let recent = isPrivate ? [] : library.recent(wide ? 8 : 5)
+                if !recent.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionTitle("Recently visited", trailing: "\(recent.count)")
+                        RowGroup {
+                            ForEach(recent) { entry in
+                                EntryRow(entry: entry) { store.open(entry.url) }
+                            }
+                        }
                     }
                 }
             }
-            .frame(maxWidth: 980, alignment: .leading)
-            .padding(.horizontal, wide ? 56 : 24)
-            .padding(.top, wide ? 64 : 28)
-            .padding(.bottom, 40)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, wide ? 40 : 20)
+            .padding(.top, wide ? 36 : 22)
+            .padding(.bottom, bottomClearance)
+            .frame(maxWidth: 860)
+            .frame(maxWidth: .infinity)
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 14)
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(Rookery.paper)
+        .background(Theme.paper)
+        .onAppear { withAnimation(Motion.soft) { appeared = true } }
     }
 
     private var masthead: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SmallCaps(Self.dateLine.string(from: Date()))
-            HStack(alignment: .firstTextBaseline, spacing: 0) {
+        HStack(alignment: .lastTextBaseline) {
+            HStack(alignment: .lastTextBaseline, spacing: 0) {
                 Text("Crowser")
-                    .font(Face.display(wide ? 84 : 58))
-                    .foregroundColor(Rookery.ink)
-                Text(".")
-                    .font(Face.display(wide ? 84 : 58))
-                    .foregroundColor(Rookery.ember)
+                    .font(Face.title(wide ? 44 : 36, weight: .bold))
+                    .foregroundColor(Theme.text)
+                Circle()
+                    .fill(Theme.ember)
+                    .frame(width: wide ? 10 : 8, height: wide ? 10 : 8)
+                    .padding(.leading, 3)
             }
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Crowser")
             .accessibilityAddTraits(.isHeader)
-
-            if isPrivate {
-                HStack(spacing: 8) {
-                    Image(systemName: "eye.slash")
-                    Text("private — nothing is kept")
-                }
-                .font(Face.mono(13))
-                .foregroundColor(Rookery.ember)
-                .padding(.top, 4)
-            }
+            Spacer()
+            Text(Self.greeting)
+                .font(Face.ui(14, weight: .medium))
+                .foregroundColor(Theme.muted)
         }
     }
 
-    private var roost: some View {
-        Shelf(
-            title: "Roost",
-            entries: Array(library.bookmarks.prefix(wide ? 10 : 6)),
-            empty: "nothing perched yet"
-        ) { store.open($0.url) }
+    private var privateNote: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: "eye.slash.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(Theme.ember)
+                .frame(width: 26)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Private tab")
+                    .font(Face.ui(16, weight: .bold))
+                    .foregroundColor(Theme.onInk)
+                Text("No history, cookies or site data are kept once you close it.")
+                    .font(Face.ui(14))
+                    .foregroundColor(Theme.onInkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.ink))
     }
 
-    private var lately: some View {
-        Shelf(
-            title: "Lately",
-            entries: isPrivate ? [] : library.recent(wide ? 10 : 5),
-            empty: isPrivate ? "not recorded here" : "nowhere yet"
-        ) { store.open($0.url) }
+    private static var greeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<12: return "Good morning"
+        case 12..<17: return "Good afternoon"
+        case 17..<22: return "Good evening"
+        default: return "Night owl hours"
+        }
     }
-
-    private static let dateLine: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("EEE d MMM")
-        return formatter
-    }()
 }
 
-/// A titled, numbered, ruled list of links.
-private struct Shelf: View {
-    let title: String
-    let entries: [Entry]
-    let empty: String
-    let open: (Entry) -> Void
+/// Shown over a tab whose page couldn't load.
+struct ErrorPage: View {
+    let error: BrowserTab.LoadError
+    let retry: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                SmallCaps(title, color: Rookery.ink)
-                Spacer()
-                if !entries.isEmpty { SmallCaps(String(format: "%02d", entries.count)) }
+        VStack(alignment: .leading, spacing: 14) {
+            Image(systemName: error.offline ? "wifi.slash" : "exclamationmark.bubble")
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundColor(Theme.ember)
+            Text(error.offline ? "You're offline" : "Can't open this page")
+                .font(Face.title(30, weight: .bold))
+                .foregroundColor(Theme.text)
+            if let url = error.url {
+                Text(Address.display(url))
+                    .font(Face.ui(16, weight: .semibold))
+                    .foregroundColor(Theme.muted)
             }
-            .padding(.bottom, 10)
-            Hairline(color: Rookery.ink)
-
-            if entries.isEmpty {
-                Text(empty)
-                    .font(Face.display(17).italic())
-                    .foregroundColor(Rookery.ash)
-                    .padding(.vertical, 14)
-            } else {
-                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                    Button { open(entry) } label: {
-                        EntryRow(index: index + 1, entry: entry)
-                    }
-                    .buttonStyle(RowPressStyle())
-                    Hairline()
-                }
+            Text(error.message)
+                .font(Face.ui(15))
+                .foregroundColor(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                Haptics.tap()
+                retry()
+            } label: {
+                Text("Try again")
+                    .font(Face.ui(16, weight: .bold))
+                    .foregroundColor(Theme.onInk)
+                    .padding(.horizontal, 22)
+                    .frame(height: 46)
+                    .background(Capsule().fill(Theme.ink))
             }
+            .buttonStyle(PressStyle())
+            .padding(.top, 6)
         }
-    }
-}
-
-struct EntryRow: View {
-    let index: Int
-    let entry: Entry
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 14) {
-            Text(String(format: "%02d", index))
-                .font(Face.mono(12))
-                .foregroundColor(Rookery.ash)
-                .frame(width: 22, alignment: .leading)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(entry.title)
-                    .font(Face.display(18))
-                    .foregroundColor(Rookery.ink)
-                    .lineLimit(1)
-                Text(Address.display(entry.url))
-                    .font(Face.mono(12))
-                    .foregroundColor(Rookery.ash)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 12)
-        .contentShape(Rectangle())
-    }
-}
-
-/// Rows darken slightly under a finger instead of flashing a system highlight.
-struct RowPressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(configuration.isPressed ? Rookery.rule : Color.clear)
+        .padding(28)
+        .frame(maxWidth: 520, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.paper)
     }
 }

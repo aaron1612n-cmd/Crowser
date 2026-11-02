@@ -2,10 +2,12 @@ import SwiftUI
 import WebKit
 
 struct SettingsSheet: View {
+    @EnvironmentObject private var store: BrowserStore
     @EnvironmentObject private var library: Library
     @Environment(\.dismiss) private var dismiss
     @AppStorage(SearchEngine.storageKey) private var engine: SearchEngine = .duckDuckGo
     @State private var clearedData = false
+    @State private var confirmClear = false
 
     private var version: String {
         let info = Bundle.main.infoDictionary
@@ -15,91 +17,115 @@ struct SettingsSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            SheetHeader(title: "Settings") {
-                TextAction("Done") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-            }
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 34) {
-                    section("Search with") {
-                        ForEach(SearchEngine.allCases) { option in
-                            Button { engine = option } label: {
-                                HStack {
-                                    Text(option.name)
-                                        .font(Face.display(19))
-                                        .foregroundColor(Rookery.ink)
-                                    Spacer()
-                                    Circle()
-                                        .fill(engine == option ? Rookery.ember : .clear)
-                                        .overlay(Circle().stroke(engine == option ? Rookery.ember : Rookery.ash, lineWidth: 1.5))
-                                        .frame(width: 12, height: 12)
-                                }
-                                .padding(.vertical, 13)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(RowPressStyle())
-                            .accessibilityAddTraits(engine == option ? .isSelected : [])
-                            Hairline()
-                        }
+        NavigationStack {
+            Form {
+                Section {
+                    Picker(selection: $engine) {
+                        ForEach(SearchEngine.allCases) { Text($0.name).tag($0) }
+                    } label: {
+                        row("Search engine", symbol: "magnifyingglass")
                     }
-
-                    section("Forget") {
-                        row("History", detail: "\(library.history.count) pages") {
-                            library.clearHistory()
-                        }
-                        Hairline()
-                        row("Cookies & site data", detail: clearedData ? "cleared" : "all sites") {
-                            WKWebsiteDataStore.default().removeData(
-                                ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
-                                modifiedSince: .distantPast
-                            ) {
-                                clearedData = true
-                            }
-                        }
-                        Hairline()
+                    Toggle(isOn: $store.suggestionsEnabled) {
+                        row("Search suggestions", symbol: "text.bubble")
                     }
-
-                    SmallCaps("Crowser \(version)")
+                } header: {
+                    header("Search")
+                } footer: {
+                    Text("Suggestions come from DuckDuckGo as you type. Never sent from private tabs.")
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 24)
-                .padding(.bottom, 40)
-                .frame(maxWidth: 640, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Section {
+                    Toggle(isOn: $store.blockTrackers) {
+                        row("Block ads & trackers", symbol: "hand.raised")
+                    }
+                    Toggle(isOn: $store.collapseOnScroll) {
+                        row("Shrink bar while scrolling", symbol: "arrow.down.right.and.arrow.up.left")
+                    }
+                } header: {
+                    header("Browsing")
+                } footer: {
+                    Text("Blocks known ad and tracking networks only, so sites keep working.")
+                }
+
+                Section {
+                    Button {
+                        confirmClear = true
+                    } label: {
+                        row("Clear history", symbol: "clock.arrow.circlepath", detail: "\(library.history.count) pages")
+                    }
+                    Button {
+                        WKWebsiteDataStore.default().removeData(
+                            ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+                            modifiedSince: .distantPast
+                        ) {
+                            clearedData = true
+                            Haptics.success()
+                        }
+                    } label: {
+                        row("Clear cookies & site data", symbol: "trash", detail: clearedData ? "Cleared" : nil)
+                    }
+                } header: {
+                    header("Privacy")
+                }
+
+                Section {
+                    HStack {
+                        HStack(alignment: .lastTextBaseline, spacing: 0) {
+                            Text("Crowser").font(Face.title(20, weight: .bold))
+                            Circle().fill(Theme.ember).frame(width: 6, height: 6).padding(.leading, 2)
+                        }
+                        Spacer()
+                        Text(version)
+                            .font(Face.ui(14, weight: .medium))
+                            .foregroundColor(Theme.muted)
+                    }
+                    .listRowBackground(Color.clear)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Theme.paper.ignoresSafeArea())
+            .tint(Theme.ember)
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .font(Face.ui(16, weight: .bold))
+                }
+            }
+            .confirmationDialog("Clear all history?", isPresented: $confirmClear, titleVisibility: .visible) {
+                Button("Clear history", role: .destructive) {
+                    library.clearHistory()
+                    Haptics.success()
+                }
             }
         }
-        .background(Rookery.paper.ignoresSafeArea())
+        .modifier(SheetChrome())
     }
 
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SmallCaps(title, color: Rookery.ink)
-                .padding(.bottom, 8)
-            Hairline(color: Rookery.ink)
-            content()
-        }
+    private func header(_ text: String) -> some View {
+        Text(text)
+            .font(Face.ui(13, weight: .bold))
+            .foregroundColor(Theme.muted)
+            .textCase(nil)
     }
 
-    private func row(_ title: String, detail: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                    .font(Face.display(19))
-                    .foregroundColor(Rookery.ink)
+    private func row(_ title: String, symbol: String, detail: String? = nil) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(Theme.onInk)
+                .frame(width: 30, height: 30)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink))
+            Text(title)
+                .font(Face.ui(16, weight: .medium))
+                .foregroundColor(Theme.text)
+            if let detail {
                 Spacer()
                 Text(detail)
-                    .font(Face.mono(12))
-                    .foregroundColor(Rookery.ash)
-                Text("clear")
-                    .font(Face.mono(13, weight: .medium))
-                    .foregroundColor(Rookery.ember)
-                    .padding(.leading, 10)
+                    .font(Face.ui(14))
+                    .foregroundColor(Theme.muted)
             }
-            .padding(.vertical, 13)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(RowPressStyle())
     }
 }

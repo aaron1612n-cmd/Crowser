@@ -77,3 +77,23 @@ enum Address {
         return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
     }
 }
+
+/// Search-as-you-type suggestions (DuckDuckGo's autocomplete endpoint, no account or key).
+enum SearchSuggestions {
+    private struct Phrase: Decodable { let phrase: String }
+
+    static func fetch(_ query: String) async -> [String] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2, !trimmed.contains("://") else { return [] }
+        var components = URLComponents(string: "https://duckduckgo.com/ac/")
+        components?.queryItems = [URLQueryItem(name: "q", value: trimmed)]
+        guard let url = components?.url else { return [] }
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let phrases = try JSONDecoder().decode([Phrase].self, from: data)
+            return phrases.map(\.phrase).filter { $0.lowercased() != trimmed.lowercased() }.prefix(5).map { $0 }
+        } catch {
+            return []
+        }
+    }
+}

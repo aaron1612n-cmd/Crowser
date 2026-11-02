@@ -27,6 +27,30 @@ final class Library: ObservableObject {
     init() {
         bookmarks = Self.load(bookmarksKey)
         history = Self.load(historyKey)
+        seedFavoritesOnFirstRun()
+    }
+
+    /// A first launch gets a handful of favorites so the start page isn't empty.
+    private func seedFavoritesOnFirstRun() {
+        let key = "crowser.seededFavorites"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        guard bookmarks.isEmpty else { return }
+        let defaults: [(String, String)] = [
+            ("Wikipedia", "https://en.wikipedia.org"),
+            ("YouTube", "https://m.youtube.com"),
+            ("Reddit", "https://www.reddit.com"),
+            ("GitHub", "https://github.com"),
+            ("Hacker News", "https://news.ycombinator.com"),
+            ("Weather", "https://weather.com"),
+        ]
+        bookmarks = defaults.compactMap { title, link in URL(string: link).map { Entry(title: title, url: $0) } }
+        save(bookmarks, bookmarksKey)
+    }
+
+    func removeBookmark(_ url: URL) {
+        bookmarks.removeAll { $0.url == url }
+        save(bookmarks, bookmarksKey)
     }
 
     func isBookmarked(_ url: URL?) -> Bool {
@@ -62,6 +86,11 @@ final class Library: ObservableObject {
 
     func removeHistory(at offsets: IndexSet) {
         history.remove(atOffsets: offsets)
+        save(history, historyKey)
+    }
+
+    func removeHistory(_ id: UUID) {
+        history.removeAll { $0.id == id }
         save(history, historyKey)
     }
 
@@ -101,7 +130,6 @@ final class Library: ObservableObject {
 
     /// Fills an empty library with a few sample entries (used for store screenshots only).
     func seedDemo() {
-        guard bookmarks.isEmpty else { return }
         let samples: [(String, String)] = [
             ("Corvidae — Wikipedia", "https://en.wikipedia.org/wiki/Corvidae"),
             ("Hacker News", "https://news.ycombinator.com"),

@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# Boots an iPhone and an iPad simulator, launches Crowser in a few states and saves screenshots.
+# Boots an iPhone and an iPad simulator, launches Crowser in several states and saves screenshots.
 # Usage: scripts/screenshots.sh path/to/Crowser.app out-dir
 set -euo pipefail
 
 APP="$1"
 OUT="$2"
 BUNDLE=com.aaron1612n.crowser
+PAGE="https://en.wikipedia.org/wiki/Corvidae"
 PAGES="https://en.wikipedia.org/wiki/Corvidae|https://news.ycombinator.com|https://www.audubon.org/field-guide/bird/american-crow"
 mkdir -p "$OUT"
 
 pick() {
-  # Newest-runtime available device whose name starts with $1.
+  # Newest-runtime "Pro" device whose name starts with $1.
   xcrun simctl list devices available -j | python3 -c '
 import json, sys
 prefix = sys.argv[1]
@@ -30,7 +31,7 @@ print(best[1] if best else "")
 
 shoot() {
   local udid="$1" name="$2" wait="$3"; shift 3
-  xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE" "$@" >/dev/null
+  xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE" -crowserFresh YES "$@" >/dev/null
   sleep "$wait"
   xcrun simctl io "$udid" screenshot "$OUT/$name.png" >/dev/null
   echo "saved $OUT/$name.png"
@@ -47,11 +48,18 @@ for kind in iPhone iPad; do
   xcrun simctl install "$udid" "$APP"
 
   xcrun simctl ui "$udid" appearance light
-  shoot "$udid" "$label-1-start" 6 -crowserSeed YES -crowserFresh YES
-  shoot "$udid" "$label-2-page" 12 -crowserFresh YES -crowserOpen "https://en.wikipedia.org/wiki/Corvidae"
-  shoot "$udid" "$label-3-tabs" 10 -crowserFresh YES -crowserOpen "$PAGES" -crowserSheet tabs
+  shoot "$udid" "$label-1-start" 8 -crowserSeed YES
+  shoot "$udid" "$label-2-page" 12 -crowserOpen "$PAGE"
+  shoot "$udid" "$label-3-tabs" 16 -crowserOpen "$PAGES" -crowserScene tabs
+  shoot "$udid" "$label-4-more" 12 -crowserOpen "$PAGE" -crowserScene more
+  if [ "$kind" = iPhone ]; then
+    shoot "$udid" "$label-5-collapsed" 12 -crowserOpen "$PAGE" -crowserScene collapsed
+    shoot "$udid" "$label-6-search" 10 -crowserSeed YES -crowserScene edit -crowserQuery "crow"
+    shoot "$udid" "$label-7-settings" 9 -crowserScene settings
+  fi
   xcrun simctl ui "$udid" appearance dark
-  shoot "$udid" "$label-4-start-dark" 6 -crowserFresh YES
+  shoot "$udid" "$label-8-start-dark" 8
+  shoot "$udid" "$label-9-tabs-dark" 16 -crowserOpen "$PAGES" -crowserScene tabs
 
   xcrun simctl shutdown "$udid" || true
 done
