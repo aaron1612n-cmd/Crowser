@@ -55,7 +55,7 @@ for kind in iPhone iPad; do
   if [ "$kind" = iPhone ]; then
     shoot "$udid" "$label-5-collapsed" 12 -crowserOpen "$PAGE" -crowserScene collapsed
     shoot "$udid" "$label-6-search" 10 -crowserSeed YES -crowserScene edit -crowserQuery "crow"
-    shoot "$udid" "$label-7-settings" 9 -crowserScene settings
+    shoot "$udid" "$label-7-settings" 14 -crowserScene settings
     shoot "$udid" "$label-10-shields" 12 -crowserOpen "$PAGE" -crowserScene shields
     shoot "$udid" "$label-11-more-full" 12 -crowserOpen "$PAGE" -crowserScene morefull
   fi
