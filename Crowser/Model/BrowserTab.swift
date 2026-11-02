@@ -36,6 +36,23 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     @Published private(set) var trackersAllowed = false
     /// In game mode the bar is hidden until you tap the corner button.
     @Published var gameBarShown = false
+    /// Every protection off for this site.
+    @Published private(set) var shieldsDown = false
+    @Published private(set) var javaScriptOn = true
+    @Published private(set) var darkPage = false
+    @Published private(set) var readerOn = false
+    @Published private(set) var zapping = false
+    /// Seconds between automatic reloads, 0 for off.
+    @Published private(set) var autoRefresh = 0
+    @Published var pinned = false
+    @Published var lastActive = Date()
+    /// One load with blocking switched off ("Reload without blocking").
+    private var bypassBlocking = false
+    private var autoRefreshTask: Task<Void, Never>?
+    /// The http address an https upgrade came from, so a failed upgrade can fall back.
+    private var upgradedFrom: URL?
+    /// Hosts that failed over https this session; HTTPS-only leaves them alone.
+    static var httpOnlyHosts: Set<String> = []
 
     var showsStartPage: Bool { url == nil && !openedByPage }
 
@@ -59,6 +76,8 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     private var needsLoad = false
     /// The site whose remembered settings are currently applied.
     private var siteKey: String?
+    /// The address whose site settings are applied (may be ahead of `url` mid-navigation).
+    private var siteURL: URL?
 
     init(url: URL? = nil, isPrivate: Bool = false, lazy: Bool = false, configuration: WKWebViewConfiguration? = nil, store: BrowserStore? = nil) {
         self.isPrivate = isPrivate
@@ -68,6 +87,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         self.isDesktop = desktop
 
         let configuration = configuration ?? Self.makeConfiguration(isPrivate: isPrivate)
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = !Prefs.shared.blockPopups
         configuration.applicationNameForUserAgent = Self.safariSuffix
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -90,8 +110,14 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         // Pages that fit the screen stay perfectly still: no bounce, no pull-down.
         webView.scrollView.alwaysBounceVertical = false
 
+        // Pop-ups share their opener's content controller, which already has the handler.
+        if !openedByPage {
+            configuration.userContentController.add(WeakMessageHandler(self), name: "crowserZap")
+        }
+
         observe()
         refreshContentRules()
+        rebuildUserScripts()
         if let url {
             if lazy {
                 self.url = url
@@ -114,8 +140,8 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         configuration.websiteDataStore = isPrivate ? .nonPersistent() : .default()
         configuration.allowsInlineMediaPlayback = true
         configuration.allowsPictureInPictureMediaPlayback = true
-        configuration.mediaTypesRequiringUserActionForPlayback = .audio
-        configuration.preferences.isFraudulentWebsiteWarningEnabled = true
+        configuration.mediaTypesRequiringUserActionForPlayback = Prefs.shared.blockAutoplay ? .all : .audio
+        configuration.preferences.isFraudulentWebsiteWarningEnabled = Prefs.shared.fraudWarnings
         if #available(iOS 16.4, *) {
             configuration.preferences.isElementFullscreenEnabled = true
         }
@@ -144,6 +170,58 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     }
 
     func stop() { webView.stopLoading() }
+
+    /// Skips the cache: everything comes fresh from the server.
+    func hardReload() {
+        guard url != nil else { return }
+        webView.reloadFromOrigin()
+        Haptics.thud()
+    }
+
+    /// Reloads once with every blocker off, for when blocking breaks a page.
+    func reloadWithoutBlocking() {
+        guard url != nil else { return }
+        bypassBlocking = true
+        refreshContentRules()
+        webView.reload()
+        Haptics.thud()
+    }
+
+    func scrollToTop() {
+        let scrollView = webView.scrollView
+        scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: -scrollView.adjustedContentInset.top), animated: true)
+    }
+
+    func scrollToBottom() {
+        let scrollView = webView.scrollView
+        let bottom = scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom
+        scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: max(bottom, -scrollView.adjustedContentInset.top)), animated: true)
+    }
+
+    func setAutoRefresh(_ seconds: Int) {
+        autoRefresh = seconds
+        autoRefreshTask?.cancel()
+        autoRefreshTask = nil
+        guard seconds > 0 else { return }
+        autoRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000)
+                guard !Task.isCancelled, let tab = self else { return }
+                if !tab.isLoading { tab.webView.reload() }
+            }
+        }
+        Haptics.select()
+    }
+
+    func setReader(_ on: Bool) { readerOn = on }
+    func setZapping(_ on: Bool) { zapping = on }
+
+    /// Called when the tab closes.
+    func teardown() {
+        autoRefreshTask?.cancel()
+        autoRefreshTask = nil
+        stop()
+    }
 
     func goBack() {
         if webView.canGoBack { webView.goBack() }
@@ -193,6 +271,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     func applySiteSettings(for target: URL?) {
         guard let store else { return }
         siteKey = SiteSettings.key(for: target)
+        siteURL = target
         let setting = store.sites.setting(for: target)
 
         let wantDesktop = setting.desktop ?? (UIDevice.current.userInterfaceIdiom == .pad)
@@ -200,10 +279,15 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
             isDesktop = wantDesktop
             webView.customUserAgent = wantDesktop ? Self.desktopAgent : nil
         }
-        if trackersAllowed != setting.allowTrackers {
-            trackersAllowed = setting.allowTrackers
-            refreshContentRules()
-        }
+        let prefs = Prefs.shared
+        trackersAllowed = setting.allowTrackers
+        shieldsDown = setting.shieldsDown
+        javaScriptOn = setting.javaScript ?? prefs.javaScript
+        darkPage = setting.darkPage ?? prefs.darkPages
+        readerOn = false
+        zapping = false
+        webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = !(prefs.blockPopups && !setting.shieldsDown)
+        refreshContentRules()
         zoom = CGFloat(setting.zoom ?? 1)
         setGame(setting.game, lock: setting.lockScroll, freshPage: true)
     }
@@ -212,6 +296,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         let controller = webView.configuration.userContentController
         controller.removeAllContentRuleLists()
         guard let store else { return }
+        guard !shieldsDown && !bypassBlocking else { return }
         if store.blockTrackers && !trackersAllowed, let rules = store.contentRules { controller.add(rules) }
         if store.hideCookieBanners, let rules = store.cookieRules { controller.add(rules) }
     }
@@ -223,6 +308,93 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         refreshContentRules()
         if url != nil { webView.reload() }
         Haptics.select()
+    }
+
+    // MARK: Shields and page styling
+
+    /// Drops (or raises) every protection for this site.
+    func toggleShields() {
+        guard url != nil else { return }
+        let down = !shieldsDown
+        store?.sites.update(url) { $0.shieldsDown = down }
+        shieldsDown = down
+        webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = !(Prefs.shared.blockPopups && !down)
+        refreshContentRules()
+        rebuildUserScripts()
+        webView.reload()
+        Haptics.thud()
+        store?.showToast(down ? "Shields down for \(Address.display(url))" : "Shields up")
+    }
+
+    func toggleJavaScript() {
+        let on = !javaScriptOn
+        javaScriptOn = on
+        let global = Prefs.shared.javaScript
+        store?.sites.update(url) { $0.javaScript = on == global ? nil : on }
+        webView.reload()
+        Haptics.select()
+    }
+
+    func toggleDarkPage() {
+        let on = !darkPage
+        darkPage = on
+        let global = Prefs.shared.darkPages
+        store?.sites.update(url) { $0.darkPage = on == global ? nil : on }
+        rebuildUserScripts()
+        if on {
+            webView.evaluateJavaScript(PageScripts.darkPage, completionHandler: nil)
+        } else {
+            webView.evaluateJavaScript("var s=document.getElementById('crowser-dark'); if (s) s.remove();", completionHandler: nil)
+        }
+        Haptics.select()
+    }
+
+    /// Re-reads global defaults (after Settings changes) for the current site.
+    func reapplyPrefs() {
+        let setting = store?.sites.setting(for: url) ?? SiteSetting()
+        javaScriptOn = setting.javaScript ?? Prefs.shared.javaScript
+        darkPage = setting.darkPage ?? Prefs.shared.darkPages
+        webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = !(Prefs.shared.blockPopups && !shieldsDown)
+        refreshContentRules()
+        rebuildUserScripts()
+    }
+
+    /// Saves your own CSS and JavaScript for this site and applies them now.
+    func saveCustomization(css: String, js: String) {
+        store?.sites.update(url) {
+            $0.css = css
+            $0.js = js
+        }
+        rebuildUserScripts()
+        webView.reload()
+    }
+
+    /// Every script Crowser puts in pages, rebuilt from the current state.
+    func rebuildUserScripts() {
+        let controller = webView.configuration.userContentController
+        controller.removeAllUserScripts()
+        let prefs = Prefs.shared
+        let site = store?.sites.setting(for: siteURL ?? url) ?? SiteSetting()
+        if !shieldsDown {
+            if prefs.fingerprinting {
+                controller.addUserScript(WKUserScript(source: PageScripts.fingerprint, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+            }
+            if prefs.stripReferrer {
+                controller.addUserScript(WKUserScript(source: PageScripts.noReferrer, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+            }
+        }
+        if darkPage {
+            controller.addUserScript(WKUserScript(source: PageScripts.darkPage, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
+        if gameMode {
+            controller.addUserScript(WKUserScript(source: PageScripts.game, injectionTime: .atDocumentEnd, forMainFrameOnly: false))
+        }
+        if !site.css.isEmpty {
+            controller.addUserScript(WKUserScript(source: PageScripts.userCSS(site.css), injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
+        if !site.js.isEmpty {
+            controller.addUserScript(WKUserScript(source: PageScripts.userJS(site.js), injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
     }
 
     // MARK: Game mode
@@ -256,42 +428,15 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         scrollView.pinchGestureRecognizer?.isEnabled = !on
         scrollView.isScrollEnabled = !(on && lock)
 
-        let controller = webView.configuration.userContentController
-        controller.removeAllUserScripts()
+        rebuildUserScripts()
         if on {
-            controller.addUserScript(WKUserScript(source: Self.gameScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false))
-            if turningOn && !freshPage { webView.evaluateJavaScript(Self.gameScript, completionHandler: nil) }
+            if turningOn && !freshPage { webView.evaluateJavaScript(PageScripts.game, completionHandler: nil) }
             setCollapsed(false)
         } else {
             gameBarShown = false
         }
     }
 
-    /// Turns off text selection, the long-press callout, tap highlights, double-tap zoom and pinch zoom.
-    private static let gameScript = #"""
-    (function () {
-      if (window.__crowserGame) return;
-      window.__crowserGame = true;
-      var css = '*:not(input):not(textarea):not([contenteditable]){-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important}'
-        + '*{-webkit-tap-highlight-color:transparent!important}'
-        + 'html,body{touch-action:manipulation;overscroll-behavior:none!important}';
-      var style = document.createElement('style');
-      style.id = 'crowser-game';
-      style.textContent = css;
-      (document.head || document.documentElement).appendChild(style);
-      var meta = document.querySelector('meta[name=viewport]');
-      if (meta) {
-        var content = meta.getAttribute('content') || '';
-        if (content.indexOf('user-scalable') < 0) meta.setAttribute('content', content + ',maximum-scale=1,user-scalable=no');
-      }
-      document.addEventListener('contextmenu', function (e) { e.preventDefault(); }, { capture: true });
-      document.addEventListener('selectstart', function (e) {
-        var t = e.target;
-        var editable = t && (t.isContentEditable || /^(INPUT|TEXTAREA)$/.test(t.tagName || ''));
-        if (!editable) e.preventDefault();
-      }, { capture: true });
-    })();
-    """#
 
 
     func findOnPage() {
@@ -385,7 +530,32 @@ extension BrowserTab: WKNavigationDelegate {
             applySiteSettings(for: target)
         }
         preferences.preferredContentMode = isDesktop ? .desktop : .mobile
+        preferences.allowsContentJavaScript = javaScriptOn
         if navigationAction.shouldPerformDownload { return (.download, preferences) }
+
+        if navigationAction.targetFrame?.isMainFrame ?? true,
+           let target = navigationAction.request.url,
+           navigationAction.request.httpMethod?.uppercased() ?? "GET" == "GET",
+           !shieldsDown {
+            let prefs = Prefs.shared
+            // Clean links: drop utm_*, fbclid, gclid and friends before the page ever sees them.
+            if prefs.cleanLinks, target.scheme?.hasPrefix("http") == true, let clean = Address.cleaned(target) {
+                load(clean)
+                return (.cancel, preferences)
+            }
+            // HTTPS-only: try the secure version first; fall back if the site really has none.
+            if prefs.httpsOnly, target.scheme?.lowercased() == "http", let host = target.host?.lowercased(),
+               !Self.httpOnlyHosts.contains(host), !Self.isLocal(host),
+               var components = URLComponents(url: target, resolvingAgainstBaseURL: false) {
+                components.scheme = "https"
+                if components.port == 80 { components.port = nil }
+                if let secure = components.url {
+                    upgradedFrom = target
+                    load(secure)
+                    return (.cancel, preferences)
+                }
+            }
+        }
         guard let url = navigationAction.request.url, let scheme = url.scheme?.lowercased() else {
             return (.allow, preferences)
         }
@@ -393,6 +563,10 @@ extension BrowserTab: WKNavigationDelegate {
         // mailto:, tel:, maps, app links: hand to the system.
         UIApplication.shared.open(url, options: [:], completionHandler: nil)
         return (.cancel, preferences)
+    }
+
+    private static func isLocal(_ host: String) -> Bool {
+        host == "localhost" || host.hasSuffix(".local") || host.allSatisfy { $0.isNumber || $0 == "." || $0 == ":" }
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse) async -> WKNavigationResponsePolicy {
@@ -430,6 +604,11 @@ extension BrowserTab: WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         sync()
+        upgradedFrom = nil
+        if bypassBlocking {
+            bypassBlocking = false
+            refreshContentRules()
+        }
         guard !isPrivate, let url = webView.url, url.scheme?.hasPrefix("http") == true else { return }
         store?.library.recordVisit(title: webView.title ?? "", url: url)
         store?.persist()
@@ -445,6 +624,15 @@ extension BrowserTab: WKNavigationDelegate {
         // Cancelled loads and loads that turned into downloads aren't failures.
         if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled { return }
         if nsError.domain == "WebKitErrorDomain" && nsError.code == 102 { return }
+        // An HTTPS upgrade that failed: remember the host and go back to plain http.
+        if let original = upgradedFrom, let host = original.host?.lowercased(),
+           (nsError.userInfo[NSURLErrorFailingURLErrorKey] as? URL)?.host?.lowercased() ?? host == host {
+            upgradedFrom = nil
+            Self.httpOnlyHosts.insert(host)
+            load(original)
+            store?.showToast("\(Address.display(original)) has no secure version")
+            return
+        }
         let failing = (nsError.userInfo[NSURLErrorFailingURLErrorKey] as? URL) ?? url
         let offline = nsError.domain == NSURLErrorDomain
             && [NSURLErrorNotConnectedToInternet, NSURLErrorNetworkConnectionLost, NSURLErrorDataNotAllowed].contains(nsError.code)
@@ -502,14 +690,21 @@ extension BrowserTab: WKUIDelegate {
             guard let link, let tab = self else { return UIMenu(children: suggested) }
             let ours = UIMenu(options: .displayInline, children: [
                 UIAction(title: "Open in New Tab", image: UIImage(systemName: "plus.square.on.square")) { _ in
-                    tab.store?.openInBackground(link, isPrivate: tab.isPrivate)
+                    if Prefs.shared.linksInBackground {
+                        tab.store?.openInBackground(link, isPrivate: tab.isPrivate)
+                    } else {
+                        tab.store?.newTab(url: link, isPrivate: tab.isPrivate, focus: false)
+                    }
                 },
                 UIAction(title: "Open in Private Tab", image: UIImage(systemName: "eye.slash")) { _ in
                     tab.store?.newTab(url: link, isPrivate: true, focus: false)
                 },
                 UIAction(title: "Copy Link", image: UIImage(systemName: "link")) { _ in
-                    UIPasteboard.general.url = link
+                    UIPasteboard.general.url = Address.cleaned(link) ?? link
                     tab.store?.showToast("Link copied")
+                },
+                UIAction(title: "Share Link", image: UIImage(systemName: "square.and.arrow.up")) { _ in
+                    Presenter.share([Address.cleaned(link) ?? link])
                 },
             ])
             return UIMenu(children: [ours] + suggested)

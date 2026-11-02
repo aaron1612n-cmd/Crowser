@@ -5,12 +5,22 @@ struct TabOverview: View {
     @EnvironmentObject private var store: BrowserStore
     @Environment(\.horizontalSizeClass) private var horizontalSize
     @State private var privateMode = false
+    @State private var search = ""
 
-    private var tabs: [BrowserTab] { store.tabs.filter { $0.isPrivate == privateMode } }
+    private var allTabs: [BrowserTab] { store.tabs.filter { $0.isPrivate == privateMode } }
+
+    private var tabs: [BrowserTab] {
+        let needle = search.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !needle.isEmpty else { return allTabs }
+        return allTabs.filter {
+            $0.title.lowercased().contains(needle) || ($0.url?.absoluteString.lowercased().contains(needle) ?? false)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             header
+            if allTabs.count > 3 { searchField }
 
             ScrollView {
                 if tabs.isEmpty {
@@ -21,7 +31,7 @@ struct TabOverview: View {
                         spacing: 20
                     ) {
                         ForEach(tabs) { tab in
-                            TabCard(tab: tab, selected: tab.id == store.selectedID) {
+                            TabCard(tab: tab, selected: tab.id == store.selectedID, store: store) {
                                 store.select(tab)
                                 store.hideOverview()
                             } close: {
@@ -86,6 +96,31 @@ struct TabOverview: View {
         .padding(.bottom, 6)
     }
 
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(Theme.muted)
+            TextField("Search tabs", text: $search)
+                .font(Face.ui(15, weight: .medium))
+                .foregroundColor(Theme.text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            if !search.isEmpty {
+                Button { search = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundColor(Theme.muted)
+                }
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 40)
+        .background(RoundedRectangle(cornerRadius: Theme.r(12), style: .continuous).fill(Theme.card))
+        .overlay(RoundedRectangle(cornerRadius: Theme.r(12), style: .continuous).stroke(Theme.line, lineWidth: 1))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
     private var emptyState: some View {
         VStack(spacing: 10) {
             Image(systemName: privateMode ? "eye.slash" : "square.on.square")
@@ -109,7 +144,7 @@ struct TabOverview: View {
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(Theme.onEmber)
                     .frame(width: 50, height: 50)
                     .background(Circle().fill(Theme.ember))
             }
@@ -176,6 +211,7 @@ private struct ModeSwitch: View {
 private struct TabCard: View {
     @ObservedObject var tab: BrowserTab
     let selected: Bool
+    let store: BrowserStore
     let open: () -> Void
     let close: () -> Void
 
@@ -186,6 +222,11 @@ private struct TabCard: View {
             preview
                 .overlay(alignment: .topTrailing) { closeButton }
             HStack(spacing: 7) {
+                if tab.pinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(Theme.ember)
+                }
                 if tab.showsStartPage {
                     Circle().fill(Theme.ember).frame(width: 7, height: 7).padding(.horizontal, 4)
                 } else {
@@ -205,6 +246,23 @@ private struct TabCard: View {
         .onTapGesture {
             Haptics.tap()
             open()
+        }
+        .contextMenu {
+            Button { store.togglePin(tab) } label: {
+                Label(tab.pinned ? "Unpin Tab" : "Pin Tab", systemImage: tab.pinned ? "pin.slash" : "pin")
+            }
+            Button { store.duplicate(tab) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
+            if let url = tab.url {
+                Button {
+                    UIPasteboard.general.url = url
+                    store.showToast("Link copied")
+                } label: { Label("Copy Link", systemImage: "link") }
+            }
+            Divider()
+            Button(role: .destructive) { store.closeOthers(than: tab) } label: {
+                Label("Close Other Tabs", systemImage: "xmark.square")
+            }
+            Button(role: .destructive, action: close) { Label("Close Tab", systemImage: "xmark") }
         }
         .simultaneousGesture(
             DragGesture(minimumDistance: 24)
@@ -244,9 +302,9 @@ private struct TabCard: View {
                     placeholder
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.r(18), style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.r(18), style: .continuous)
                     .stroke(selected ? Theme.ember : Theme.line, lineWidth: selected ? 3 : 1)
             )
             .shadow(color: .black.opacity(0.1), radius: 10, y: 5)

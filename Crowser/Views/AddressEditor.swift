@@ -90,7 +90,7 @@ struct AddressEditor: View {
             .padding(.trailing, 4)
             .frame(height: 48)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.r(18), style: .continuous)
                     .fill(Theme.bar)
                     .matchedGeometryEffect(id: "field", in: morph)
             )
@@ -166,6 +166,7 @@ struct AddressEditor: View {
     }
 
     private var resolvesToAddress: Bool {
+        if Address.shortcut(in: query) != nil { return false }
         guard let url = Address.resolve(query) else { return false }
         return SearchEngine.allCases.allSatisfy { $0.url(for: query) != url }
     }
@@ -173,7 +174,8 @@ struct AddressEditor: View {
     private var goSymbol: String { resolvesToAddress ? "arrow.up.right.circle.fill" : "magnifyingglass.circle.fill" }
 
     private var goTitle: String {
-        resolvesToAddress ? "Go to \(Address.display(Address.resolve(query)))" : "Search \(SearchEngine.current.name) for “\(query)”"
+        if let (shortcut, words) = Address.shortcut(in: query) { return "Search \(shortcut.name) for “\(words)”" }
+        return resolvesToAddress ? "Go to \(Address.display(Address.resolve(query)))" : "Search \(SearchEngine.current.name) for “\(query)”"
     }
 
     private func submit(_ text: String) {
@@ -192,10 +194,10 @@ struct RowGroup<Content: View>: View {
             content()
         }
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.r(18), style: .continuous)
                 .fill(Theme.card)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.r(18), style: .continuous))
     }
 }
 

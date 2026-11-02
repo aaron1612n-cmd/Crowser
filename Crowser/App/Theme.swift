@@ -9,7 +9,14 @@ enum Theme {
     static let onInk = Color(uiColor: .hex(0xF3EFE7))
     static let onInkMuted = Color(uiColor: .hex(0x9A9488))
 
-    static let ember = Color(uiColor: .hex(0xE2531F))
+    /// The one accent. Ember by default; Settings → Look can swap it for another preset.
+    static var ember: Color { Color(uiColor: .hex(Look.accent.hex)) }
+    /// Text and icons placed on the accent.
+    static var onEmber: Color { Color(uiColor: .hex(Look.accent.onAccent)) }
+    static var emberUI: UIColor { .hex(Look.accent.hex) }
+
+    /// Corner radius scaled by the roundness setting.
+    static func r(_ base: CGFloat) -> CGFloat { base * Look.roundness }
 
     /// The floating bar: crow-black on light pages, lifted to charcoal at night so it never vanishes.
     static let bar = adaptive(light: 0x171614, dark: 0x2B2926)
@@ -24,8 +31,9 @@ enum Theme {
     static let card = adaptive(light: 0xFFFDF9, dark: 0x1D1B19)
     /// Primary text on paper.
     static let text = adaptive(light: 0x1A1916, dark: 0xF1EDE5)
-    /// Secondary text on paper.
-    static let muted = adaptive(light: 0x7F796E, dark: 0x8F897E)
+    /// Secondary text on paper (darker with high contrast on).
+    static var muted: Color { Look.highContrast ? text : mutedSoft }
+    private static let mutedSoft = adaptive(light: 0x7F796E, dark: 0x8F897E)
     /// Hairlines on paper.
     static let line = Color(uiColor: UIColor {
         $0.userInterfaceStyle == .dark ? .hex(0xFFFFFF, alpha: 0.09) : .hex(0x000000, alpha: 0.08)
@@ -55,35 +63,55 @@ extension UIColor {
 /// Type pairing: New York (serif) for titles, SF Rounded for everything you touch.
 enum Face {
     static func title(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
-        .system(size: size, weight: weight, design: .serif)
+        .system(size: size * Look.textScale, weight: heavier(weight), design: .serif)
     }
 
     static func ui(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight, design: .rounded)
+        .system(size: size * Look.textScale, weight: heavier(weight), design: .rounded)
+    }
+
+    static func mono(_ size: CGFloat) -> Font {
+        .system(size: size * Look.textScale, weight: Look.boldText ? .semibold : .regular, design: .monospaced)
+    }
+
+    private static func heavier(_ weight: Font.Weight) -> Font.Weight {
+        guard Look.boldText else { return weight }
+        switch weight {
+        case .ultraLight, .thin, .light: return .regular
+        case .regular: return .semibold
+        case .medium: return .bold
+        case .semibold: return .bold
+        case .bold: return .heavy
+        default: return .black
+        }
     }
 }
 
 /// One set of springs so every movement in the app feels like the same material.
 enum Motion {
-    static let snappy = Animation.spring(response: 0.34, dampingFraction: 0.84)
-    static let soft = Animation.spring(response: 0.48, dampingFraction: 0.86)
-    static let quick = Animation.easeOut(duration: 0.18)
+    static var snappy: Animation { Look.reduceMotion ? .easeOut(duration: 0.12) : .spring(response: 0.34, dampingFraction: 0.84) }
+    static var soft: Animation { Look.reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.48, dampingFraction: 0.86) }
+    static var quick: Animation { .easeOut(duration: Look.reduceMotion ? 0.1 : 0.18) }
 }
 
 enum Haptics {
     static func tap() {
+        guard Look.haptics else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
     static func thud() {
+        guard Look.haptics else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
 
     static func select() {
+        guard Look.haptics else { return }
         UISelectionFeedbackGenerator().selectionChanged()
     }
 
     static func success() {
+        guard Look.haptics else { return }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 }

@@ -7,6 +7,7 @@ struct StartPage: View {
 
     @EnvironmentObject private var store: BrowserStore
     @EnvironmentObject private var library: Library
+    @EnvironmentObject private var prefs: Prefs
     @Environment(\.horizontalSizeClass) private var horizontalSize
     @State private var appeared = false
 
@@ -21,14 +22,16 @@ struct StartPage: View {
 
                 if isPrivate { privateNote }
 
-                if !library.bookmarks.isEmpty {
+                if !prefs.shortcuts.isEmpty { shortcutStrip }
+
+                if prefs.showFavorites && !library.bookmarks.isEmpty {
                     VStack(alignment: .leading, spacing: 14) {
                         SectionTitle("Favorites")
                         FavoritesGrid(entries: Array(library.bookmarks.prefix(wide ? 16 : 12))) { store.open($0.url) }
                     }
                 }
 
-                let recent = isPrivate ? [] : library.recent(wide ? 8 : 5)
+                let recent = isPrivate || !prefs.showRecent ? [] : library.recent(wide ? 8 : 5)
                 if !recent.isEmpty {
                     VStack(alignment: .leading, spacing: 12) {
                         SectionTitle("Recently visited", trailing: "\(recent.count)")
@@ -52,6 +55,37 @@ struct StartPage: View {
         .calmScroll()
         .background(Theme.paper)
         .onAppear { withAnimation(Motion.soft) { appeared = true } }
+    }
+
+    /// Search shortcuts as chips: tap one to start a search on that site.
+    private var shortcutStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(prefs.shortcuts) { shortcut in
+                    Button {
+                        Haptics.tap()
+                        store.beginEditing()
+                        store.addressDraft = shortcut.keyword + " "
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(shortcut.keyword)
+                                .font(Face.ui(13, weight: .heavy))
+                                .foregroundColor(Theme.ember)
+                            Text(shortcut.name)
+                                .font(Face.ui(13, weight: .semibold))
+                                .foregroundColor(Theme.text)
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(height: 34)
+                        .background(Capsule().fill(Theme.card))
+                        .overlay(Capsule().stroke(Theme.line, lineWidth: 1))
+                    }
+                    .buttonStyle(PressStyle())
+                    .accessibilityLabel("Search \(shortcut.name)")
+                }
+            }
+            .padding(.horizontal, 1)
+        }
     }
 
     private var masthead: some View {

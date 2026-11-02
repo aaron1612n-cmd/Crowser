@@ -5,7 +5,7 @@ import WebKit
 @MainActor
 final class BrowserStore: ObservableObject {
     enum Sheet: String, Identifiable {
-        case library, settings, more
+        case library, settings, more, shields, siteCode
         var id: String { rawValue }
     }
 
@@ -75,6 +75,21 @@ final class BrowserStore: ObservableObject {
     // MARK: Tabs
 
     func newTab(url: URL? = nil, isPrivate: Bool = false, focus: Bool = true) {
+        var url = url
+        var focus = focus
+        if url == nil {
+            switch Prefs.shared.home {
+            case .site:
+                if let home = Prefs.shared.homePage {
+                    url = home
+                    focus = false
+                }
+            case .blank:
+                url = URL(string: "about:blank")
+            case .start:
+                break
+            }
+        }
         let tab = BrowserTab(url: url, isPrivate: isPrivate, store: self)
         tabs.append(tab)
         selectedID = tab.id
@@ -111,6 +126,7 @@ final class BrowserStore: ObservableObject {
         guard tab.id != selectedID else { return }
         if let previous = current { Task { await previous.captureSnapshot() } }
         selectedID = tab.id
+        tab.lastActive = Date()
         Haptics.select()
         persist()
     }
@@ -132,7 +148,7 @@ final class BrowserStore: ObservableObject {
 
     func close(_ tab: BrowserTab) {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
-        tab.stop()
+        tab.teardown()
         if !tab.isPrivate, let page = tab.webView.url ?? tab.url {
             closedPages.append(page)
             if closedPages.count > 20 { closedPages.removeFirst() }
@@ -157,13 +173,55 @@ final class BrowserStore: ObservableObject {
     }
 
     func closeAll(isPrivate: Bool) {
-        let doomed = tabs.filter { $0.isPrivate == isPrivate }
-        doomed.forEach { $0.stop() }
-        tabs.removeAll { $0.isPrivate == isPrivate }
+        let doomed = tabs.filter { $0.isPrivate == isPrivate && !$0.pinned }
+        doomed.forEach { $0.teardown() }
+        let ids = Set(doomed.map(\.id))
+        tabs.removeAll { ids.contains($0.id) }
         if tabs.isEmpty { newTab(focus: false) } else if current == nil || !tabs.contains(where: { $0.id == selectedID }) {
             selectedID = tabs.last?.id
         }
         persist()
+    }
+
+    /// Closes every other tab of the same kind (pinned tabs stay).
+    func closeOthers(than keep: BrowserTab) {
+        let doomed = tabs.filter { $0.id != keep.id && $0.isPrivate == keep.isPrivate && !$0.pinned }
+        doomed.forEach { $0.teardown() }
+        let ids = Set(doomed.map(\.id))
+        tabs.removeAll { ids.contains($0.id) }
+        selectedID = keep.id
+        Haptics.thud()
+        showToast("Closed \(doomed.count) tab\(doomed.count == 1 ? "" : "s")")
+        persist()
+    }
+
+    func duplicate(_ tab: BrowserTab) {
+        guard let page = tab.webView.url ?? tab.url else { return }
+        let copy = BrowserTab(url: page, isPrivate: tab.isPrivate, store: self)
+        if let index = tabs.firstIndex(where: { $0.id == tab.id }) {
+            tabs.insert(copy, at: index + 1)
+        } else {
+            tabs.append(copy)
+        }
+        selectedID = copy.id
+        Haptics.tap()
+        persist()
+    }
+
+    /// Pinned tabs sit first, survive "Close all" and auto-close.
+    func togglePin(_ tab: BrowserTab) {
+        tab.pinned.toggle()
+        let pinned = tabs.filter(\.pinned)
+        let rest = tabs.filter { !$0.pinned }
+        tabs = pinned + rest
+        Haptics.select()
+        showToast(tab.pinned ? "Pinned" : "Unpinned")
+        persist()
+    }
+
+    /// Pushes changed global settings into every open tab.
+    func prefsChanged() {
+        tabs.forEach { $0.reapplyPrefs() }
     }
 
     func showOverview() {
@@ -240,16 +298,34 @@ final class BrowserStore: ObservableObject {
         let links = saved.map { ($0.webView.url ?? $0.url)?.absoluteString ?? "" }
         let selected = saved.firstIndex { $0.id == selectedID } ?? max(0, saved.count - 1)
         UserDefaults.standard.set(links, forKey: tabsKey)
+        UserDefaults.standard.set(saved.map(\.pinned), forKey: tabsKey + ".pinned")
+        UserDefaults.standard.set(saved.map { $0.lastActive.timeIntervalSince1970 }, forKey: tabsKey + ".active")
         UserDefaults.standard.set(selected, forKey: selectedKey)
     }
 
     private func restore() {
-        let links = UserDefaults.standard.stringArray(forKey: tabsKey) ?? []
-        for link in links {
-            tabs.append(BrowserTab(url: URL(string: link), lazy: true, store: self))
+        let defaults = UserDefaults.standard
+        let links = defaults.stringArray(forKey: tabsKey) ?? []
+        let pins = defaults.array(forKey: tabsKey + ".pinned") as? [Bool] ?? []
+        let active = defaults.array(forKey: tabsKey + ".active") as? [Double] ?? []
+        let selected = defaults.integer(forKey: selectedKey)
+        let days = Prefs.shared.autoCloseDays
+        var selectedTab: BrowserTab?
+        for (index, link) in links.enumerated() {
+            let pinned = pins.indices.contains(index) && pins[index]
+            let last = active.indices.contains(index) ? Date(timeIntervalSince1970: active[index]) : Date()
+            // Auto-close: tabs nobody looked at for too long quietly go to "recently closed".
+            if days > 0, !pinned, index != selected, Date().timeIntervalSince(last) > Double(days) * 86_400 {
+                if let url = URL(string: link) { closedPages.append(url) }
+                continue
+            }
+            let tab = BrowserTab(url: URL(string: link), lazy: true, store: self)
+            tab.pinned = pinned
+            tab.lastActive = last
+            tabs.append(tab)
+            if index == selected { selectedTab = tab }
         }
-        let selected = UserDefaults.standard.integer(forKey: selectedKey)
-        selectedID = tabs.indices.contains(selected) ? tabs[selected].id : tabs.last?.id
+        selectedID = selectedTab?.id ?? tabs.last?.id
     }
 
     // MARK: Screenshot hooks (launch arguments, used by CI only)
@@ -275,6 +351,10 @@ final class BrowserStore: ObservableObject {
             current?.setCollapsed(true)
         case "settings":
             sheet = .settings
+        case "shields":
+            sheet = .shields
+        case "morefull":
+            sheet = .more
         default:
             break
         }

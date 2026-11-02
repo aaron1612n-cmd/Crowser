@@ -56,10 +56,15 @@ for kind in iPhone iPad; do
     shoot "$udid" "$label-5-collapsed" 12 -crowserOpen "$PAGE" -crowserScene collapsed
     shoot "$udid" "$label-6-search" 10 -crowserSeed YES -crowserScene edit -crowserQuery "crow"
     shoot "$udid" "$label-7-settings" 9 -crowserScene settings
+    shoot "$udid" "$label-10-shields" 12 -crowserOpen "$PAGE" -crowserScene shields
+    shoot "$udid" "$label-11-more-full" 12 -crowserOpen "$PAGE" -crowserScene morefull
   fi
   xcrun simctl ui "$udid" appearance dark
   shoot "$udid" "$label-8-start-dark" 8
   shoot "$udid" "$label-9-tabs-dark" 16 -crowserOpen "$PAGES" -crowserScene tabs
+  if [ "$kind" = iPhone ]; then
+    shoot "$udid" "$label-12-settings-dark" 9 -crowserScene settings
+  fi
 
   xcrun simctl shutdown "$udid" || true
 done

@@ -13,6 +13,9 @@ struct FloatingBar: View {
     @GestureState private var swipe: CGFloat = 0
 
     private var collapsed: Bool { tab.barCollapsed && !tab.showsStartPage }
+    private var compact: Bool { Look.compact }
+    private var controlHeight: CGFloat { compact ? 36 : 42 }
+    private var style: BarStyle { Look.barStyle }
 
     var body: some View {
         Group {
@@ -40,13 +43,16 @@ struct FloatingBar: View {
             tabsButton
             moreButton
         }
-        .padding(6)
+        .padding(compact ? 4 : 6)
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.r(compact ? 20 : 24), style: .continuous)
                 .fill(Theme.bar)
-                .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Theme.barEdge, lineWidth: 1))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Theme.r(compact ? 20 : 24), style: .continuous)
+                        .stroke(style == .outline ? Theme.ember : Theme.barEdge, lineWidth: style == .outline ? 1.5 : 1)
+                )
                 .matchedGeometryEffect(id: "bar", in: morph)
-                .shadow(color: .black.opacity(0.22), radius: 18, x: 0, y: 8)
+                .shadow(color: .black.opacity(style == .solid ? 0.22 : 0), radius: 18, x: 0, y: 8)
         )
         .overlay(alignment: barOnTop ? .bottom : .top) {
             LoadLine(progress: tab.progress, isLoading: tab.isLoading)
@@ -56,10 +62,20 @@ struct FloatingBar: View {
     }
 
     private var addressPill: some View {
-        HStack(spacing: 8) {
-            Image(systemName: leadingSymbol)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(tab.isPrivate ? Theme.ember : Theme.onInkMuted)
+        HStack(spacing: 4) {
+            Button {
+                Haptics.tap()
+                store.sheet = tab.showsStartPage ? nil : .shields
+                if tab.showsStartPage { store.beginEditing() }
+            } label: {
+                Image(systemName: leadingSymbol)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(leadingTint)
+                    .frame(width: 26, height: controlHeight)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(PressStyle())
+            .accessibilityLabel(tab.shieldsDown ? "Shields down" : "Shields")
             Text(addressText)
                 .font(Face.ui(15, weight: .semibold))
                 .foregroundColor(tab.url == nil ? Theme.onInkMuted : Theme.onInk)
@@ -71,29 +87,36 @@ struct FloatingBar: View {
                     tab.isLoading ? tab.stop() : tab.reload()
                     Haptics.tap()
                 } label: {
-                    Image(systemName: tab.isLoading ? "xmark" : "arrow.clockwise")
+                    Image(systemName: tab.isLoading ? "xmark" : (tab.autoRefresh > 0 ? "timer" : "arrow.clockwise"))
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(Theme.onInk)
-                        .frame(width: 32, height: 40)
+                        .foregroundColor(tab.autoRefresh > 0 ? Theme.ember : Theme.onInk)
+                        .frame(width: 32, height: controlHeight - 2)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(PressStyle())
+                .contextMenu {
+                    Button { tab.hardReload() } label: { Label("Reload Without Cache", systemImage: "arrow.clockwise.circle") }
+                    Button { tab.reloadWithoutBlocking() } label: { Label("Reload Without Blocking", systemImage: "shield.slash") }
+                    Divider()
+                    Button { tab.scrollToTop() } label: { Label("Scroll to Top", systemImage: "arrow.up.to.line") }
+                    Button { tab.scrollToBottom() } label: { Label("Scroll to Bottom", systemImage: "arrow.down.to.line") }
+                }
                 .accessibilityLabel(tab.isLoading ? "Stop" : "Reload")
             }
         }
-        .padding(.leading, 12)
+        .padding(.leading, 6)
         .padding(.trailing, 2)
-        .frame(height: 42)
+        .frame(height: controlHeight)
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Theme.barRaised)
+            RoundedRectangle(cornerRadius: Theme.r(compact ? 13 : 16), style: .continuous)
+                .fill(style == .minimal ? Color.clear : Theme.barRaised)
                 .matchedGeometryEffect(id: "field", in: morph)
         )
         .offset(x: swipe)
         .contentShape(Rectangle())
         .onTapGesture { store.beginEditing() }
-        .gesture(swipeTabs)
+        .gesture(swipeTabs, including: Prefs.shared.swipeTabs ? .all : .subviews)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(tab.url == nil ? "Search or enter address" : "Address, \(addressText)")
         .accessibilityAddTraits(.isButton)
@@ -125,9 +148,17 @@ struct FloatingBar: View {
     }
 
     private var leadingSymbol: String {
+        if tab.url == nil || tab.showsStartPage { return tab.isPrivate ? "eye.slash.fill" : "magnifyingglass" }
+        if tab.shieldsDown { return "shield.slash" }
+        if tab.readerOn { return "doc.plaintext" }
         if tab.isPrivate { return "eye.slash.fill" }
-        if tab.url == nil || tab.showsStartPage { return "magnifyingglass" }
-        return tab.isSecure ? "lock.fill" : "exclamationmark.triangle.fill"
+        return tab.isSecure ? "lock.shield.fill" : "exclamationmark.shield.fill"
+    }
+
+    private var leadingTint: Color {
+        if tab.isPrivate || tab.shieldsDown { return Theme.ember }
+        if !tab.isSecure && !tab.showsStartPage && tab.url != nil { return Theme.ember }
+        return Theme.onInkMuted
     }
 
     @ViewBuilder
@@ -146,7 +177,7 @@ struct FloatingBar: View {
             Image(systemName: back ? "chevron.backward" : "chevron.forward")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundColor(enabled ? Theme.onInk : Theme.onInkMuted.opacity(0.4))
-                .frame(width: 40, height: 42)
+                .frame(width: compact ? 36 : 40, height: controlHeight)
                 .contentShape(Rectangle())
         } primaryAction: {
             back ? tab.goBack() : tab.goForward()
@@ -170,7 +201,7 @@ struct FloatingBar: View {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
                         .stroke(Theme.onInk, lineWidth: 1.8)
                 )
-                .frame(width: 40, height: 42)
+                .frame(width: compact ? 36 : 40, height: controlHeight)
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())
@@ -194,7 +225,7 @@ struct FloatingBar: View {
             Image(systemName: "ellipsis")
                 .font(.system(size: 17, weight: .bold))
                 .foregroundColor(Theme.onInk)
-                .frame(width: 40, height: 42)
+                .frame(width: compact ? 36 : 40, height: controlHeight)
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressStyle())

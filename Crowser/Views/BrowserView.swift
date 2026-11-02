@@ -5,9 +5,21 @@ struct BrowserView: View {
     @EnvironmentObject private var library: Library
     @Environment(\.horizontalSizeClass) private var horizontalSize
     @Environment(\.scenePhase) private var scenePhase
+    @EnvironmentObject private var prefs: Prefs
 
-    /// iPad and wide windows keep the bar on top; phones keep it under the thumb.
-    private var barOnTop: Bool { horizontalSize == .regular }
+    /// iPad and wide windows keep the bar on top; phones keep it under the thumb. Settings can force either.
+    private var barOnTop: Bool {
+        switch prefs.barPosition {
+        case .top: return true
+        case .bottom: return false
+        case .auto: return horizontalSize == .regular
+        }
+    }
+
+    /// Anything that changes how the interface is drawn. A change redraws everything with the new look.
+    private var lookToken: String {
+        "\(prefs.accent.rawValue)|\(prefs.barStyle.rawValue)|\(prefs.roundness)|\(prefs.compact)|\(prefs.textScale)|\(prefs.boldText)|\(prefs.highContrast)"
+    }
 
     var body: some View {
         ZStack {
@@ -29,17 +41,25 @@ struct BrowserView: View {
             ToastView()
                 .zIndex(2)
         }
+        .id(lookToken)
+        .tint(Theme.ember)
+        .preferredColorScheme(prefs.appearance.scheme)
         .sheet(item: $store.sheet) { sheet in
             Group {
                 switch sheet {
                 case .library: LibrarySheet()
                 case .settings: SettingsSheet()
                 case .more: MorePanel()
+                case .shields: ShieldsSheet()
+                case .siteCode: SiteCodeSheet()
                 }
             }
             .environmentObject(store)
             .environmentObject(library)
+            .environmentObject(prefs)
+            .environmentObject(store.sites)
             .tint(Theme.ember)
+            .preferredColorScheme(prefs.appearance.scheme)
         }
         .onChange(of: scenePhase) { phase in
             if phase != .active { store.persist() }
@@ -56,6 +76,7 @@ private struct TabStage: View {
     @Namespace private var morph
 
     private var collapsed: Bool { tab.barCollapsed && !tab.showsStartPage && !barOnTop }
+    private var compact: Bool { Look.compact }
 
     var body: some View {
         ZStack(alignment: barOnTop ? .top : .bottom) {
@@ -123,7 +144,7 @@ private struct TabStage: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: barOnTop ? 66 : (collapsed ? 44 : 64), alignment: barOnTop ? .top : .bottom)
+        .frame(height: barOnTop ? (compact ? 56 : 66) : (collapsed ? 44 : (compact ? 54 : 64)), alignment: barOnTop ? .top : .bottom)
         .background(Theme.paper.ignoresSafeArea(edges: barOnTop ? .top : .bottom))
         .animation(Motion.snappy, value: collapsed)
     }

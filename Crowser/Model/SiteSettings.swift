@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 /// Choices remembered for one website (keyed by host, without "www.").
 struct SiteSetting: Codable, Equatable {
@@ -7,12 +8,36 @@ struct SiteSetting: Codable, Equatable {
     var desktop: Bool?
     var zoom: Double?
     var allowTrackers = false
+    /// Every protection off for this site in one switch.
+    var shieldsDown = false
+    /// nil follows the global setting.
+    var javaScript: Bool?
+    var darkPage: Bool?
+    /// Your own styles and script for this site.
+    var css = ""
+    var js = ""
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        game = try c.decodeIfPresent(Bool.self, forKey: .game) ?? false
+        lockScroll = try c.decodeIfPresent(Bool.self, forKey: .lockScroll) ?? true
+        desktop = try c.decodeIfPresent(Bool.self, forKey: .desktop)
+        zoom = try c.decodeIfPresent(Double.self, forKey: .zoom)
+        allowTrackers = try c.decodeIfPresent(Bool.self, forKey: .allowTrackers) ?? false
+        shieldsDown = try c.decodeIfPresent(Bool.self, forKey: .shieldsDown) ?? false
+        javaScript = try c.decodeIfPresent(Bool.self, forKey: .javaScript)
+        darkPage = try c.decodeIfPresent(Bool.self, forKey: .darkPage)
+        css = try c.decodeIfPresent(String.self, forKey: .css) ?? ""
+        js = try c.decodeIfPresent(String.self, forKey: .js) ?? ""
+    }
 }
 
 /// Per-site memory: game mode, desktop site, text size, tracker exceptions.
 @MainActor
-final class SiteSettings {
-    private(set) var sites: [String: SiteSetting] = [:]
+final class SiteSettings: ObservableObject {
+    @Published private(set) var sites: [String: SiteSetting] = [:]
     private let storageKey = "crowser.sites"
 
     init() {
@@ -40,6 +65,14 @@ final class SiteSettings {
     }
 
     var gameSites: [String] { sites.filter { $0.value.game }.map(\.key).sorted() }
+    var customizedSites: [String] { sites.filter { !$0.value.css.isEmpty || !$0.value.js.isEmpty }.map(\.key).sorted() }
+    var shieldsDownSites: [String] { sites.filter { $0.value.shieldsDown }.map(\.key).sorted() }
+    var allSites: [String] { sites.keys.sorted() }
+
+    func remove(_ key: String) {
+        sites[key] = nil
+        save()
+    }
 
     func clearAll() {
         sites = [:]
