@@ -55,32 +55,45 @@ private struct TabStage: View {
     @EnvironmentObject private var store: BrowserStore
     @Namespace private var morph
 
-    static let barClearance: CGFloat = 78
+    private var collapsed: Bool { tab.barCollapsed && !tab.showsStartPage && !barOnTop }
 
     var body: some View {
         ZStack(alignment: barOnTop ? .top : .bottom) {
-            content
-                .padding(.top, barOnTop ? 66 : 0)
-                .ignoresSafeArea(.container, edges: barOnTop ? [] : .bottom)
+            // The page and the bar sit one above the other; the bar never covers the page.
+            // (Covering it meant padding every page, which made pages that should stay still scrollable.)
+            VStack(spacing: 0) {
+                if barOnTop { barSlot }
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if !barOnTop { barSlot }
+            }
 
             if store.isEditingAddress {
                 AddressEditor(tab: tab, barOnTop: barOnTop, morph: morph)
                     .transition(.opacity)
                     .zIndex(1)
-            } else {
+            }
+        }
+        .task(id: tab.id) { tab.activate() }
+    }
+
+    private var barSlot: some View {
+        ZStack {
+            if !store.isEditingAddress {
                 FloatingBar(tab: tab, barOnTop: barOnTop, morph: morph)
                     .transition(.opacity)
             }
         }
-        .onAppear { tab.setBottomInset(barOnTop ? 0 : Self.barClearance) }
-        .task(id: tab.id) { tab.activate() }
-        .onChange(of: barOnTop) { onTop in tab.setBottomInset(onTop ? 0 : Self.barClearance) }
+        .frame(maxWidth: .infinity)
+        .frame(height: barOnTop ? 66 : (collapsed ? 44 : 64), alignment: barOnTop ? .top : .bottom)
+        .background(Theme.paper.ignoresSafeArea(edges: barOnTop ? .top : .bottom))
+        .animation(Motion.snappy, value: collapsed)
     }
 
     @ViewBuilder
     private var content: some View {
         if tab.showsStartPage {
-            StartPage(isPrivate: tab.isPrivate, bottomClearance: barOnTop ? 24 : Self.barClearance + 12)
+            StartPage(isPrivate: tab.isPrivate, bottomClearance: 24)
         } else {
             WebViewContainer(webView: tab.webView)
                 .overlay {

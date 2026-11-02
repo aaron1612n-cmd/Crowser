@@ -78,9 +78,8 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         webView.navigationDelegate = self
         webView.uiDelegate = self
 
-        let refresh = UIRefreshControl()
-        refresh.addTarget(self, action: #selector(pulledToRefresh(_:)), for: .valueChanged)
-        webView.scrollView.refreshControl = refresh
+        // Pages that fit the screen stay perfectly still: no bounce, no pull-down.
+        webView.scrollView.alwaysBounceVertical = false
 
         observe()
         if let rules = store?.contentRules { webView.configuration.userContentController.add(rules) }
@@ -151,11 +150,6 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         webView.go(to: item)
     }
 
-    @objc private func pulledToRefresh(_ control: UIRefreshControl) {
-        reload()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { control.endRefreshing() }
-    }
-
     // MARK: Page tools
 
     func toggleDesktop() {
@@ -196,14 +190,6 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         let controller = webView.configuration.userContentController
         controller.removeAllContentRuleLists()
         if enabled, let rules { controller.add(rules) }
-    }
-
-    /// Space under the page for the floating bar.
-    func setBottomInset(_ inset: CGFloat) {
-        let scrollView = webView.scrollView
-        guard scrollView.contentInset.bottom != inset else { return }
-        scrollView.contentInset.bottom = inset
-        scrollView.verticalScrollIndicatorInsets.bottom = inset
     }
 
     // MARK: Bar collapse while scrolling
