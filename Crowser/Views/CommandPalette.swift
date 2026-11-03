@@ -147,6 +147,14 @@ struct CommandPalette: View {
             Command(id: "settings", title: "Settings", symbol: "gearshape", keywords: "preferences options", run: { store.sheet = .settings }),
             Command(id: "shields", title: "Shields", symbol: "checkmark.shield", keywords: "privacy trackers block", run: { store.sheet = .shields }),
             Command(id: "hidebar", title: store.barTucked ? "Show Toolbar" : "Hide Toolbar", symbol: "rectangle.bottomhalf.inset.filled", keywords: "bar tuck", run: { store.toggleTuck() }),
+            Command(id: "scan", title: "Scan QR Code", symbol: "qrcode.viewfinder", keywords: "camera qr barcode", run: { store.sheet = .qrScan }),
+            Command(id: "fullscreen", title: "Fullscreen", symbol: "arrow.up.left.and.arrow.down.right", keywords: "full screen hide bar immersive", run: { store.enterFullscreen() }),
+            Command(id: "lite", title: prefs.liteMode ? "Turn Off Lite Mode" : "Lite Mode", symbol: "hare", keywords: "data slow images fast", run: {
+                prefs.liteMode.toggle()
+                store.prefsChanged()
+                store.current?.webView.reload()
+            }),
+            Command(id: "cookies", title: "Manage Cookies", symbol: "list.bullet.rectangle", keywords: "cookies privacy", run: { store.sheet = .settings }),
             Command(id: "theme", title: "Switch Light / Dark", symbol: "circle.lefthalf.filled", keywords: "theme appearance dark mode", run: {
                 prefs.appearance = prefs.appearance == .dark ? .light : .dark
             }),
@@ -168,6 +176,10 @@ struct CommandPalette: View {
             Command(id: "define", title: "Look Up Word", symbol: "character.book.closed", keywords: "dictionary define meaning", run: { tab.define() }),
             Command(id: "pip", title: "Picture in Picture", symbol: "pip.enter", keywords: "video float pip", run: { tab.pictureInPicture() }),
             Command(id: "aloud", title: "Read Aloud", symbol: "speaker.wave.2", keywords: "speak voice", run: { tab.readAloud() }),
+            Command(id: "shot", title: "Full-Page Screenshot", symbol: "camera.viewfinder", keywords: "capture image whole", run: { tab.fullPageScreenshot() }),
+            Command(id: "qr", title: "Show QR Code for Page", symbol: "qrcode", keywords: "share qr", run: { store.sheet = .qrCode }),
+            Command(id: "note", title: "Notes for This Site", symbol: "note.text", keywords: "memo write", run: { store.sheet = .note }),
+            Command(id: "awake", title: tab.keepAwake ? "Let Screen Sleep Here" : "Keep Screen On Here", symbol: "sun.max", keywords: "awake dim lock", run: { tab.toggleKeepAwake() }),
             Command(id: "pdf", title: "Save as PDF", symbol: "doc.richtext", keywords: "export print", run: { tab.saveAsPDF() }),
             Command(id: "source", title: "View Page Source", symbol: "chevron.left.forwardslash.chevron.right", keywords: "html code", run: { tab.viewSource() }),
             Command(id: "hide", title: "Hide an Item on the Page", symbol: "eye.slash.circle", keywords: "zap remove element", run: { tab.toggleZapper() }),
@@ -178,6 +190,7 @@ struct CommandPalette: View {
             }),
             Command(id: "dark", title: tab.darkPage ? "Light Page" : "Dark Page", symbol: "moon", keywords: "night invert", run: { tab.toggleDarkPage() }),
             Command(id: "desktop", title: tab.isDesktop ? "Mobile Site" : "Desktop Site", symbol: "desktopcomputer", keywords: "request", run: { tab.toggleDesktop() }),
+            Command(id: "agent", title: tab.agentID == nil ? "Identify as Chrome" : "Identify as Crowser", symbol: "theatermasks", keywords: "user agent browser pretend", run: { tab.setAgent(tab.agentID == nil ? "chrome-win" : nil) }),
             Command(id: "shieldsdown", title: tab.shieldsDown ? "Shields Up Here" : "Shields Down Here", symbol: "shield.slash", keywords: "privacy block site", run: { tab.toggleShields() }),
             Command(id: "pin", title: tab.pinned ? "Unpin Tab" : "Pin Tab", symbol: "pin", run: { store.togglePin(tab) }),
             Command(id: "dup", title: "Duplicate Tab", symbol: "plus.square.on.square", run: { store.duplicate(tab) }),

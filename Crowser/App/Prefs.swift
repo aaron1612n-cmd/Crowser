@@ -114,6 +114,10 @@ final class Prefs: ObservableObject {
     @Published var showFavorites: Bool { didSet { save(showFavorites, "showFavorites") } }
     @Published var showRecent: Bool { didSet { save(showRecent, "showRecent") } }
     @Published var swipeTabs: Bool { didSet { save(swipeTabs, "swipeTabs") } }
+    /// Private tabs need Face ID (or the passcode) after Crowser has been in the background.
+    @Published var lockPrivate: Bool { didSet { save(lockPrivate, "lockPrivate") } }
+    /// No images, fonts or video: pages load in a fraction of the time on a slow connection.
+    @Published var liteMode: Bool { didSet { save(liteMode, "liteMode") } }
     /// Web audio and video keep playing in the background and picture in picture works across apps.
     @Published var backgroundAudio: Bool {
         didSet {
@@ -162,6 +166,8 @@ final class Prefs: ObservableObject {
         showFavorites = bool("showFavorites", true)
         showRecent = bool("showRecent", true)
         swipeTabs = bool("swipeTabs", true)
+        lockPrivate = bool("lockPrivate", false)
+        liteMode = bool("liteMode", false)
         backgroundAudio = bool("backgroundAudio", true)
         if let data = d.data(forKey: "crowser.pref.shortcuts"),
            let saved = try? JSONDecoder().decode([SearchShortcut].self, from: data) {

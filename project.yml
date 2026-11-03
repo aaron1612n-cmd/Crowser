@@ -7,8 +7,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.6.0"
-    CURRENT_PROJECT_VERSION: "8"
+    MARKETING_VERSION: "0.7.0"
+    CURRENT_PROJECT_VERSION: "9"
 targets:
   Crowser:
     type: application
@@ -50,6 +50,7 @@ targets:
         NSCameraUsageDescription: Websites you visit can ask to use the camera, for example for video calls or scanning.
         NSMicrophoneUsageDescription: Websites you visit can ask to use the microphone, for example for calls or voice search.
         NSLocationWhenInUseUsageDescription: Websites you visit can ask for your location, for example for maps or local results.
+        NSFaceIDUsageDescription: Face ID keeps your private tabs locked until you open them.
         NSPhotoLibraryAddUsageDescription: Lets you save images from web pages to your photo library.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoadsInWebContent: true

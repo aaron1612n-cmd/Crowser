@@ -46,6 +46,9 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     @Published private(set) var autoRefresh = 0
     @Published var pinned = false
     @Published var groupID: UUID?
+    /// Site-chosen browser identity (nil = Safari).
+    @Published private(set) var agentID: String?
+    @Published private(set) var keepAwake = false
     @Published var lastActive = Date()
     /// One load with blocking switched off ("Reload without blocking").
     private var bypassBlocking = false
@@ -63,6 +66,18 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         let version = ProcessInfo.processInfo.operatingSystemVersion
         return "Version/\(version.majorVersion).\(version.minorVersion) Mobile/15E148 Safari/604.1"
     }()
+
+    /// Browsers a site can be told it's talking to.
+    static let agents: [(id: String, name: String, desktop: Bool, string: String)] = [
+        ("chrome-win", "Chrome on Windows", true,
+         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"),
+        ("firefox-win", "Firefox on Windows", true,
+         "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0"),
+        ("chrome-android", "Chrome on Android", false,
+         "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"),
+        ("chrome-ios", "Chrome on iPhone", false,
+         "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/130.0.0.0 Mobile/15E148 Safari/604.1"),
+    ]
 
     static let desktopAgent: String = {
         let version = ProcessInfo.processInfo.operatingSystemVersion
@@ -218,6 +233,31 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
 
     func setReader(_ on: Bool) { readerOn = on }
 
+    /// Tells this site Crowser is another browser (nil goes back to Safari).
+    func setAgent(_ id: String?) {
+        store?.sites.update(url) { $0.agent = id }
+        let agent = id.flatMap { id in Self.agents.first { $0.id == id } }
+        agentID = agent?.id
+        isDesktop = agent?.desktop ?? (store?.sites.setting(for: url).desktop ?? (UIDevice.current.userInterfaceIdiom == .pad))
+        webView.customUserAgent = agent?.string ?? (isDesktop ? Self.desktopAgent : nil)
+        if url != nil { webView.reload() }
+        Haptics.select()
+    }
+
+    func toggleKeepAwake() {
+        keepAwake.toggle()
+        let on = keepAwake
+        store?.sites.update(url) { $0.awake = on }
+        Haptics.select()
+    }
+
+    func saveNote(_ text: String) {
+        store?.sites.update(url) { $0.note = text.trimmingCharacters(in: .whitespacesAndNewlines) }
+        objectWillChange.send()
+    }
+
+    var note: String { store?.sites.setting(for: url).note ?? "" }
+
     func setBottomObstruction(_ height: CGFloat) {
         guard bottomObstruction != height else { return }
         bottomObstruction = height
@@ -263,6 +303,10 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     // MARK: Page tools
 
     func toggleDesktop() {
+        if agentID != nil {
+            agentID = nil
+            store?.sites.update(url) { $0.agent = nil }
+        }
         isDesktop.toggle()
         webView.customUserAgent = isDesktop ? Self.desktopAgent : nil
         let desktop = isDesktop
@@ -297,11 +341,13 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         siteURL = target
         let setting = store.sites.setting(for: target)
 
-        let wantDesktop = setting.desktop ?? (UIDevice.current.userInterfaceIdiom == .pad)
-        if wantDesktop != isDesktop {
-            isDesktop = wantDesktop
-            webView.customUserAgent = wantDesktop ? Self.desktopAgent : nil
-        }
+        let agent = setting.agent.flatMap { id in Self.agents.first { $0.id == id } }
+        agentID = agent?.id
+        keepAwake = setting.awake
+        let wantDesktop = agent?.desktop ?? setting.desktop ?? (UIDevice.current.userInterfaceIdiom == .pad)
+        isDesktop = wantDesktop
+        let wantAgent = agent?.string ?? (wantDesktop ? Self.desktopAgent : nil)
+        if webView.customUserAgent != wantAgent { webView.customUserAgent = wantAgent }
         let prefs = Prefs.shared
         trackersAllowed = setting.allowTrackers
         shieldsDown = setting.shieldsDown
@@ -322,6 +368,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         guard !shieldsDown && !bypassBlocking else { return }
         if store.blockTrackers && !trackersAllowed, let rules = store.contentRules { controller.add(rules) }
         if store.hideCookieBanners, let rules = store.cookieRules { controller.add(rules) }
+        if Prefs.shared.liteMode, let rules = store.liteRules { controller.add(rules) }
     }
 
     func toggleTrackersAllowed() {

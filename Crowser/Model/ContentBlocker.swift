@@ -65,6 +65,15 @@ enum ContentBlocker {
         return list
     }
 
+    /// Lite mode: pages load without images, web fonts or video.
+    static func compileLite() async -> WKContentRuleList? {
+        let rules: [[String: Any]] = [[
+            "trigger": ["url-filter": ".*", "resource-type": ["image", "font", "media"]],
+            "action": ["type": "block"],
+        ]]
+        return await compile(rules, identifier: "crowser.lite.v1")
+    }
+
     static func compile() async -> WKContentRuleList? {
         let rules: [[String: Any]] = domains.map { domain in
             [

@@ -108,6 +108,7 @@ struct SettingsSheet: View {
                     Toggle(isOn: $prefs.fraudWarnings) { row("Fraud warnings", symbol: "exclamationmark.triangle") }
                     Toggle(isOn: $prefs.javaScript) { row("JavaScript", symbol: "curlybraces") }
                     Toggle(isOn: $prefs.darkPages) { row("Dark pages everywhere", symbol: "moon") }
+                    Toggle(isOn: $prefs.liteMode) { row("Lite mode (no images, fonts, video)", symbol: "hare") }
                 } header: {
                     header("Shields")
                 } footer: {
@@ -125,6 +126,12 @@ struct SettingsSheet: View {
                 }
 
                 Section {
+                    Toggle(isOn: $prefs.lockPrivate) { row("Lock private tabs with Face ID", symbol: "faceid") }
+                    NavigationLink {
+                        CookieManager()
+                    } label: {
+                        row("Cookies", symbol: "list.bullet.rectangle")
+                    }
                     Button {
                         confirmClear = true
                     } label: {
@@ -175,6 +182,8 @@ struct SettingsSheet: View {
             .onChange(of: prefs.blockPopups) { _ in store.prefsChanged() }
             .onChange(of: prefs.javaScript) { _ in store.prefsChanged() }
             .onChange(of: prefs.darkPages) { _ in store.prefsChanged() }
+            .onChange(of: prefs.liteMode) { _ in store.prefsChanged() }
+            .onChange(of: prefs.lockPrivate) { on in if on { store.keepPrivateUnlockedForNow() } }
             .confirmationDialog("Clear all history?", isPresented: $confirmClear, titleVisibility: .visible) {
                 Button("Clear history", role: .destructive) {
                     library.clearHistory()

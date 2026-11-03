@@ -1,3 +1,4 @@
+import LocalAuthentication
 import SwiftUI
 import WebKit
 
@@ -5,7 +6,7 @@ import WebKit
 @MainActor
 final class BrowserStore: ObservableObject {
     enum Sheet: String, Identifiable {
-        case library, settings, more, shields, siteCode, palette
+        case library, settings, more, shields, siteCode, palette, qrScan, qrCode, note
         var id: String { rawValue }
     }
 
@@ -16,6 +17,8 @@ final class BrowserStore: ObservableObject {
     @Published var isEditingAddress = false
     @Published var addressDraft = ""
     @Published private(set) var toast: String?
+    /// A toast can carry one action, like Undo.
+    private(set) var toastAction: (title: String, run: () -> Void)?
     /// Tab groups, and the one the overview is showing (nil shows every tab).
     @Published private(set) var groups: [TabGroup] = []
     @Published var activeGroupID: UUID?
@@ -46,6 +49,11 @@ final class BrowserStore: ObservableObject {
     let sites = SiteSettings()
     private(set) var contentRules: WKContentRuleList?
     private(set) var cookieRules: WKContentRuleList?
+    private(set) var liteRules: WKContentRuleList?
+    /// Private tabs stay covered until Face ID (or the passcode) unlocks them.
+    @Published private(set) var privateUnlocked = false
+    /// Toolbar and status bar both hidden.
+    @Published private(set) var fullscreen = false
 
     private let tabsKey = "crowser.tabs"
     private let selectedKey = "crowser.selectedTab"
@@ -161,6 +169,9 @@ final class BrowserStore: ObservableObject {
             if closedPages.count > 20 { closedPages.removeFirst() }
         }
         tabs.remove(at: index)
+        if !tab.isPrivate && tab.url != nil {
+            showToast("Tab closed", action: (title: "Undo", run: { [weak self] in self?.reopenClosedTab() }))
+        }
         if tabs.isEmpty {
             newTab(focus: false)
         } else if selectedID == tab.id {
@@ -169,8 +180,22 @@ final class BrowserStore: ObservableObject {
         persist()
     }
 
+    func runToastAction() {
+        let action = toastAction
+        toastAction = nil
+        withAnimation(Motion.soft) { toast = nil }
+        action?.run()
+    }
+
     func reopenClosedTab() {
         guard let page = closedPages.popLast() else { return }
+        newTab(url: page, focus: false)
+        Haptics.tap()
+    }
+
+    /// Reopens one particular recently closed page.
+    func reopen(_ page: URL) {
+        if let index = closedPages.lastIndex(of: page) { closedPages.remove(at: index) }
         newTab(url: page, focus: false)
         Haptics.tap()
     }
@@ -394,6 +419,45 @@ final class BrowserStore: ObservableObject {
         showToast(adding ? "Added to favorites" : "Removed from favorites")
     }
 
+    // MARK: Private lock
+
+    var privateLocked: Bool { Prefs.shared.lockPrivate && !privateUnlocked }
+
+    func unlockPrivate() async {
+        let context = LAContext()
+        context.localizedCancelTitle = "Not now"
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+            privateUnlocked = true
+            return
+        }
+        let ok = (try? await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Unlock your private tabs")) ?? false
+        if ok {
+            withAnimation(Motion.soft) { privateUnlocked = true }
+            Haptics.success()
+        }
+    }
+
+    /// Turning the lock on shouldn't lock you out of the tab you're in; it starts next time.
+    func keepPrivateUnlockedForNow() {
+        privateUnlocked = true
+    }
+
+    /// Called when Crowser goes to the background.
+    func lockPrivate() {
+        privateUnlocked = false
+    }
+
+    // MARK: Fullscreen
+
+    func enterFullscreen() {
+        Haptics.thud()
+        withAnimation(Motion.snappy) {
+            fullscreen = true
+            barTucked = true
+        }
+    }
+
     /// Folds the bar into its small pill right now.
     func collapseBar() {
         guard let tab = current else { return }
@@ -414,7 +478,10 @@ final class BrowserStore: ObservableObject {
 
     func untuckBar() {
         Haptics.tap()
-        withAnimation(Motion.snappy) { barTucked = false }
+        withAnimation(Motion.snappy) {
+            barTucked = false
+            fullscreen = false
+        }
         current?.setCollapsed(false)
     }
 
@@ -422,11 +489,12 @@ final class BrowserStore: ObservableObject {
         barTucked ? untuckBar() : tuckBar()
     }
 
-    func showToast(_ message: String) {
+    func showToast(_ message: String, action: (title: String, run: () -> Void)? = nil) {
         toastTask?.cancel()
+        toastAction = action
         withAnimation(Motion.snappy) { toast = message }
         toastTask = Task {
-            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            try? await Task.sleep(nanoseconds: action == nil ? 1_800_000_000 : 4_000_000_000)
             guard !Task.isCancelled else { return }
             withAnimation(Motion.soft) { toast = nil }
         }
@@ -437,6 +505,7 @@ final class BrowserStore: ObservableObject {
     private func loadContentRules() async {
         contentRules = await ContentBlocker.compile()
         cookieRules = await ContentBlocker.compileCookieRules()
+        liteRules = await ContentBlocker.compileLite()
         tabs.forEach { $0.refreshContentRules() }
     }
 
@@ -513,6 +582,8 @@ final class BrowserStore: ObservableObject {
             tuckBar()
         case "palette":
             sheet = .palette
+        case "qrcode":
+            sheet = .qrCode
         case "groups":
             if let first = tabs.first { createGroup(named: "Games", with: first) }
             if tabs.count > 1 { createGroup(named: "Reading", with: tabs[1]) }

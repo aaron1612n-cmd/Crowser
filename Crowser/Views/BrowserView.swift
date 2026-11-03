@@ -53,6 +53,9 @@ struct BrowserView: View {
                 case .shields: ShieldsSheet()
                 case .siteCode: SiteCodeSheet()
                 case .palette: CommandPalette()
+                case .qrScan: QRScannerSheet()
+                case .qrCode: QRCodeSheet()
+                case .note: SiteNoteSheet()
                 }
             }
             .environmentObject(store)
@@ -64,6 +67,7 @@ struct BrowserView: View {
         }
         .onChange(of: scenePhase) { phase in
             if phase != .active { store.persist() }
+            if phase == .background { store.lockPrivate() }
         }
     }
 }
@@ -107,6 +111,12 @@ private struct TabStage: View {
 
             if tab.gameMode { gameOverlay }
 
+            if tab.isPrivate && store.privateLocked {
+                PrivateLockView()
+                    .transition(.opacity)
+                    .zIndex(2)
+            }
+
             if store.isEditingAddress {
                 AddressEditor(tab: tab, barOnTop: barOnTop, morph: morph)
                     .transition(.opacity)
@@ -114,11 +124,11 @@ private struct TabStage: View {
             }
         }
         .task(id: tab.id) { tab.activate() }
-        .statusBarHidden(tab.gameMode)
-        .persistentSystemOverlays(tab.gameMode ? .hidden : .automatic)
+        .statusBarHidden(tab.gameMode || store.fullscreen)
+        .persistentSystemOverlays(tab.gameMode || store.fullscreen ? .hidden : .automatic)
         .animation(Motion.snappy, value: tab.gameMode)
-        .onAppear { UIApplication.shared.isIdleTimerDisabled = tab.gameMode }
-        .onChange(of: tab.gameMode) { on in UIApplication.shared.isIdleTimerDisabled = on }
+        .onAppear { UIApplication.shared.isIdleTimerDisabled = tab.gameMode || tab.keepAwake }
+        .onChange(of: tab.gameMode || tab.keepAwake) { on in UIApplication.shared.isIdleTimerDisabled = on }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
     }
 
@@ -235,19 +245,34 @@ private struct ToastView: View {
     var body: some View {
         VStack {
             if let message = store.toast {
-                Text(message)
-                    .font(Face.ui(14, weight: .semibold))
-                    .foregroundColor(Theme.onInk)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(Capsule().fill(Theme.bar))
-                    .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .accessibilityAddTraits(.updatesFrequently)
+                HStack(spacing: 12) {
+                    Text(message)
+                        .font(Face.ui(14, weight: .semibold))
+                        .foregroundColor(Theme.onInk)
+                    if let action = store.toastAction {
+                        Button {
+                            Haptics.tap()
+                            store.runToastAction()
+                        } label: {
+                            Text(action.title)
+                                .font(Face.ui(14, weight: .heavy))
+                                .foregroundColor(Theme.ember)
+                                .padding(.vertical, 4)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PressStyle())
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Capsule().fill(Theme.bar))
+                .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .accessibilityAddTraits(.updatesFrequently)
             }
             Spacer()
         }
         .padding(.top, 8)
-        .allowsHitTesting(false)
+        .allowsHitTesting(store.toastAction != nil && store.toast != nil)
     }
 }

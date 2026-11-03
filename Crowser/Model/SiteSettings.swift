@@ -18,6 +18,12 @@ struct SiteSetting: Codable, Equatable {
     var js = ""
     /// Frame counter overlay (game mode).
     var fps = false
+    /// Which browser the site is told it's talking to (nil = Safari for this device).
+    var agent: String?
+    /// Your own notes for this site.
+    var note = ""
+    /// Keep the screen on while this site is open.
+    var awake = false
 
     init() {}
 
@@ -34,6 +40,9 @@ struct SiteSetting: Codable, Equatable {
         css = try c.decodeIfPresent(String.self, forKey: .css) ?? ""
         js = try c.decodeIfPresent(String.self, forKey: .js) ?? ""
         fps = try c.decodeIfPresent(Bool.self, forKey: .fps) ?? false
+        agent = try c.decodeIfPresent(String.self, forKey: .agent)
+        note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
+        awake = try c.decodeIfPresent(Bool.self, forKey: .awake) ?? false
     }
 }
 

@@ -29,7 +29,9 @@ struct TabOverview: View {
             if allTabs.count > 3 { searchField }
 
             ScrollView {
-                if tabs.isEmpty {
+                if privateMode && store.privateLocked && !tabs.isEmpty {
+                    lockedState
+                } else if tabs.isEmpty {
                     emptyState
                 } else if listStyle {
                     LazyVStack(spacing: 8) {
@@ -287,6 +289,29 @@ struct TabOverview: View {
         .padding(.top, 120)
     }
 
+    private var lockedState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 30, weight: .bold))
+                .foregroundColor(Theme.ember)
+            Text("\(tabs.count) private tabs, locked")
+                .font(Face.title(20, weight: .bold))
+                .foregroundColor(Theme.text)
+            Button {
+                Task { await store.unlockPrivate() }
+            } label: {
+                Label("Unlock", systemImage: "faceid")
+                    .font(Face.ui(16, weight: .bold))
+                    .foregroundColor(Theme.onEmber)
+                    .frame(width: 180, height: 48)
+                    .background(Capsule().fill(Theme.ember))
+            }
+            .buttonStyle(PressStyle())
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 120)
+    }
+
     private var footer: some View {
         HStack(spacing: 14) {
             ModeSwitch(privateMode: $privateMode)
@@ -303,6 +328,20 @@ struct TabOverview: View {
             }
             .buttonStyle(PressStyle())
             .accessibilityLabel(privateMode ? "New private tab" : "New tab")
+            .contextMenu {
+                if !store.closedPages.isEmpty {
+                    Section("Recently closed") {
+                        ForEach(Array(store.closedPages.reversed().prefix(10).enumerated()), id: \.offset) { _, page in
+                            Button { store.reopen(page) } label: {
+                                Label(Address.display(page), systemImage: "arrow.uturn.backward")
+                            }
+                        }
+                    }
+                }
+                Button { store.newTab(isPrivate: !privateMode) } label: {
+                    Label(privateMode ? "New Tab" : "New Private Tab", systemImage: privateMode ? "plus.square" : "eye.slash")
+                }
+            }
 
             Button {
                 store.hideOverview()

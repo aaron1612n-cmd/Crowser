@@ -115,6 +115,28 @@ struct MorePanel: View {
                             dismiss()
                             store.tuckBar()
                         }
+                        ActionTile("Fullscreen", symbol: "arrow.up.left.and.arrow.down.right") {
+                            dismiss()
+                            store.enterFullscreen()
+                        }
+                        ActionTile("Screenshot", symbol: "camera.viewfinder", enabled: hasPage) {
+                            after { tab.fullPageScreenshot() }
+                        }
+                        ActionTile("Scan QR", symbol: "qrcode.viewfinder") {
+                            after { store.sheet = .qrScan }
+                        }
+                        ActionTile("QR code", symbol: "qrcode", enabled: hasPage) {
+                            after { store.sheet = .qrCode }
+                        }
+                        ActionTile(prefs.liteMode ? "Lite on" : "Lite", symbol: "hare", highlighted: prefs.liteMode) {
+                            prefs.liteMode.toggle()
+                            store.prefsChanged()
+                            tab.webView.reload()
+                            Haptics.select()
+                        }
+                        ActionTile("Notes", symbol: tab.note.isEmpty ? "note.text" : "note.text.badge.plus", highlighted: !tab.note.isEmpty, enabled: hasPage) {
+                            after { store.sheet = .note }
+                        }
                     }
 
                     HStack(spacing: 10) {
@@ -285,6 +307,30 @@ struct MorePanel: View {
                     SwitchRow("Desktop version", detail: nil, symbol: "desktopcomputer", isOn: tab.isDesktop) {
                         tab.toggleDesktop()
                     }
+                    Menu {
+                        Picker("Identify as", selection: Binding(get: { tab.agentID ?? "" }, set: { tab.setAgent($0.isEmpty ? nil : $0) })) {
+                            Text("Crowser (Safari)").tag("")
+                            ForEach(BrowserTab.agents.map { $0.id }, id: \.self) { id in
+                                Text(BrowserTab.agents.first { $0.id == id }?.name ?? id).tag(id)
+                            }
+                        }
+                    } label: {
+                        NavRow(
+                            "Identify as",
+                            detail: BrowserTab.agents.first { $0.id == tab.agentID }?.name ?? "Crowser (Safari)",
+                            symbol: "theatermasks.fill",
+                            lit: tab.agentID != nil
+                        )
+                    }
+                    SwitchRow("Keep screen on", detail: "The screen won't dim or lock on this site.", symbol: "sun.max.fill", isOn: tab.keepAwake) {
+                        tab.toggleKeepAwake()
+                    }
+                    Button {
+                        after { store.sheet = .note }
+                    } label: {
+                        NavRow("Notes", detail: tab.note.isEmpty ? "Jot something down for this site." : String(tab.note.prefix(90)), symbol: "note.text", lit: !tab.note.isEmpty)
+                    }
+                    .buttonStyle(PressStyle(scale: 0.98))
                     Button {
                         after { store.sheet = .siteCode }
                     } label: {

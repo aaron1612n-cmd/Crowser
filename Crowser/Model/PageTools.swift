@@ -59,6 +59,50 @@ extension BrowserTab {
         }
     }
 
+    // MARK: Full-page screenshot
+
+    /// The whole page, top to bottom, as one tall image.
+    func fullPageScreenshot() {
+        guard url != nil else { return }
+        store?.showToast("Capturing the whole page…")
+        webView.createPDF(configuration: WKPDFConfiguration()) { [weak self] result in
+            Task { @MainActor in
+                guard case .success(let data) = result,
+                      let provider = CGDataProvider(data: data as CFData),
+                      let pdf = CGPDFDocument(provider), pdf.numberOfPages > 0 else {
+                    self?.store?.showToast("Couldn't capture this page")
+                    return
+                }
+                var pages: [CGPDFPage] = []
+                for index in 1...pdf.numberOfPages { if let page = pdf.page(at: index) { pages.append(page) } }
+                let width = pages.map { $0.getBoxRect(.mediaBox).width }.max() ?? 1
+                let height = pages.reduce(CGFloat(0)) { $0 + $1.getBoxRect(.mediaBox).height }
+                // Keep very long pages under the size iOS will happily share.
+                let scale = min(2, 16_000 / max(height, 1))
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = scale
+                let renderer = UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: format)
+                let image = renderer.image { context in
+                    UIColor.white.setFill()
+                    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+                    var y: CGFloat = 0
+                    for page in pages {
+                        let box = page.getBoxRect(.mediaBox)
+                        let cg = context.cgContext
+                        cg.saveGState()
+                        cg.translateBy(x: 0, y: y + box.height)
+                        cg.scaleBy(x: 1, y: -1)
+                        cg.drawPDFPage(page)
+                        cg.restoreGState()
+                        y += box.height
+                    }
+                }
+                Haptics.success()
+                Presenter.share([image])
+            }
+        }
+    }
+
     // MARK: Source
 
     func viewSource() {
