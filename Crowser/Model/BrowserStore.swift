@@ -16,6 +16,8 @@ final class BrowserStore: ObservableObject {
     @Published var isEditingAddress = false
     @Published var addressDraft = ""
     @Published private(set) var toast: String?
+    /// The bar is tucked away to a small ember pull tab until you bring it back.
+    @Published private(set) var barTucked = false
 
     @Published var collapseOnScroll: Bool {
         didSet { UserDefaults.standard.set(collapseOnScroll, forKey: "crowser.collapseOnScroll") }
@@ -272,6 +274,34 @@ final class BrowserStore: ObservableObject {
         showToast(adding ? "Added to favorites" : "Removed from favorites")
     }
 
+    /// Folds the bar into its small pill right now.
+    func collapseBar() {
+        guard let tab = current else { return }
+        if tab.showsStartPage || UIDevice.current.userInterfaceIdiom == .pad {
+            tuckBar()
+            return
+        }
+        Haptics.tap()
+        withAnimation(Motion.snappy) { tab.setCollapsed(true) }
+    }
+
+    /// Hides the bar completely; only the pull tab stays.
+    func tuckBar() {
+        Haptics.thud()
+        withAnimation(Motion.snappy) { barTucked = true }
+        current?.setCollapsed(false)
+    }
+
+    func untuckBar() {
+        Haptics.tap()
+        withAnimation(Motion.snappy) { barTucked = false }
+        current?.setCollapsed(false)
+    }
+
+    func toggleTuck() {
+        barTucked ? untuckBar() : tuckBar()
+    }
+
     func showToast(_ message: String) {
         toastTask?.cancel()
         withAnimation(Motion.snappy) { toast = message }
@@ -351,6 +381,8 @@ final class BrowserStore: ObservableObject {
             current?.setCollapsed(true)
         case "settings":
             sheet = .settings
+        case "tucked":
+            tuckBar()
         case "shields":
             sheet = .shields
         case "morefull":

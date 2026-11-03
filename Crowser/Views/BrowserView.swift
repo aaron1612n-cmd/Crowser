@@ -151,21 +151,34 @@ private struct TabStage: View {
         }
     }
 
+    private var barHeight: CGFloat {
+        if store.barTucked { return 26 }
+        return barOnTop ? (compact ? 56 : 66) : (collapsed ? 44 : (compact ? 54 : 64))
+    }
+
+    private var obstruction: CGFloat {
+        barOnTop || store.barTucked ? 0 : (compact ? 54 : 64)
+    }
+
     private var barSlot: some View {
         ZStack {
-            if !store.isEditingAddress {
+            if store.barTucked && !store.isEditingAddress {
+                PullTab(barOnTop: barOnTop)
+                    .transition(.move(edge: barOnTop ? .top : .bottom).combined(with: .opacity))
+            } else if !store.isEditingAddress {
                 FloatingBar(tab: tab, barOnTop: barOnTop, morph: morph)
-                    .transition(.opacity)
+                    .transition(.move(edge: barOnTop ? .top : .bottom).combined(with: .opacity))
             }
         }
         .frame(maxWidth: .infinity)
-        .frame(height: barOnTop ? (compact ? 56 : 66) : (collapsed ? 44 : (compact ? 54 : 64)), alignment: barOnTop ? .top : .bottom)
+        .frame(height: barHeight, alignment: barOnTop ? .top : .bottom)
         .background {
             if barOnTop { Theme.paper.ignoresSafeArea(edges: .top) }
         }
         .animation(Motion.snappy, value: collapsed)
-        .onAppear { tab.setBottomObstruction(barOnTop ? 0 : (compact ? 54 : 64)) }
-        .onChange(of: barOnTop) { top in tab.setBottomObstruction(top ? 0 : (compact ? 54 : 64)) }
+        .animation(Motion.snappy, value: store.barTucked)
+        .onAppear { tab.setBottomObstruction(obstruction) }
+        .onChange(of: obstruction) { value in tab.setBottomObstruction(value) }
     }
 
     @ViewBuilder
@@ -182,6 +195,35 @@ private struct TabStage: View {
                 }
                 .animation(Motion.quick, value: tab.loadError)
         }
+    }
+}
+
+/// What's left of a tucked-away bar: a short ember pull tab at the edge.
+/// Tap it or pull it toward the middle of the screen to bring the bar back.
+private struct PullTab: View {
+    let barOnTop: Bool
+    @EnvironmentObject private var store: BrowserStore
+    @GestureState private var pull: CGFloat = 0
+
+    var body: some View {
+        Capsule()
+            .fill(Theme.ember)
+            .frame(width: 46 + min(abs(pull), 40), height: 6)
+            .shadow(color: .black.opacity(0.25), radius: 4, y: 1)
+            .offset(y: barOnTop ? min(max(pull, 0), 24) : max(min(pull, 0), -24))
+            .frame(width: 140, height: 26)
+            .contentShape(Rectangle())
+            .onTapGesture { store.untuckBar() }
+            .gesture(
+                DragGesture(minimumDistance: 6)
+                    .updating($pull) { value, state, _ in state = value.translation.height }
+                    .onEnded { value in
+                        let toward = barOnTop ? value.translation.height : -value.translation.height
+                        if toward > 14 { store.untuckBar() }
+                    }
+            )
+            .accessibilityLabel("Show toolbar")
+            .accessibilityAddTraits(.isButton)
     }
 }
 

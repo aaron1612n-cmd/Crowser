@@ -92,9 +92,9 @@ struct MorePanel: View {
                         ActionTile("Library", symbol: "books.vertical") {
                             after { store.sheet = .library }
                         }
-                        ActionTile("Top", symbol: "arrow.up.to.line", enabled: hasPage) {
+                        ActionTile("Hide bar", symbol: "rectangle.bottomhalf.inset.filled") {
                             dismiss()
-                            tab.scrollToTop()
+                            store.tuckBar()
                         }
                     }
 

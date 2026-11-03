@@ -25,6 +25,19 @@ struct FloatingBar: View {
                 expandedBar
             }
         }
+        // Flick the bar toward the edge: once folds it to the pill, again tucks it away entirely.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 18)
+                .onEnded { value in
+                    let dy = barOnTop ? -value.translation.height : value.translation.height
+                    guard abs(value.translation.height) > abs(value.translation.width) * 1.3 else { return }
+                    if dy > 26 {
+                        if collapsed || barOnTop || tab.showsStartPage { store.tuckBar() } else { store.collapseBar() }
+                    } else if dy < -26 && collapsed {
+                        tab.setCollapsed(false)
+                    }
+                }
+        )
         .animation(Motion.snappy, value: collapsed)
         .padding(.horizontal, barOnTop ? 16 : 10)
         .padding(barOnTop ? .top : .bottom, barOnTop ? 8 : 4)
@@ -36,6 +49,7 @@ struct FloatingBar: View {
 
     private var expandedBar: some View {
         HStack(spacing: 2) {
+            if !barOnTop { handle }
             navButton(back: true)
             navButton(back: false)
             addressPill
@@ -59,6 +73,23 @@ struct FloatingBar: View {
                 .padding(.horizontal, 22)
         }
         .environment(\.colorScheme, .dark)
+    }
+
+    /// A short grip at the bar's edge: tap folds the bar instantly, hold tucks it away.
+    private var handle: some View {
+        Button {
+            store.collapseBar()
+        } label: {
+            Capsule()
+                .fill(Theme.ember)
+                .frame(width: 4, height: 22)
+                .frame(width: 14, height: controlHeight)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressStyle(scale: 0.8))
+        .simultaneousGesture(LongPressGesture(minimumDuration: 0.35).onEnded { _ in store.tuckBar() })
+        .accessibilityLabel("Fold toolbar")
+        .accessibilityAction(named: "Hide toolbar") { store.tuckBar() }
     }
 
     private var addressPill: some View {
@@ -212,6 +243,7 @@ struct FloatingBar: View {
                 Button { store.reopenClosedTab() } label: { Label("Reopen Closed Tab", systemImage: "arrow.uturn.backward") }
             }
             Divider()
+            Button { store.tuckBar() } label: { Label("Hide Toolbar", systemImage: "rectangle.bottomhalf.inset.filled") }
             Button(role: .destructive) { store.closeCurrent() } label: { Label("Close This Tab", systemImage: "xmark") }
         }
         .accessibilityLabel("Tabs, \(store.tabs.count) open")

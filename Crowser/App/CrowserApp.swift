@@ -58,6 +58,8 @@ struct CrowserApp: App {
                     .keyboardShortcut("y")
                 Button("Find on Page") { store.current?.findOnPage() }
                     .keyboardShortcut("f")
+                Button("Show or Hide Toolbar") { store.toggleTuck() }
+                    .keyboardShortcut("b", modifiers: [.command, .shift])
                 Button("Shields") { store.sheet = .shields }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
                 Button("Settings") { store.sheet = .settings }

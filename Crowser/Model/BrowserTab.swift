@@ -484,7 +484,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
 
     private func scrolled(from old: CGFloat, to new: CGFloat) {
         let scrollView = webView.scrollView
-        guard store?.collapseOnScroll ?? true, scrollView.isTracking || scrollView.isDecelerating else { return }
+        guard !(store?.barTucked ?? false), store?.collapseOnScroll ?? true, scrollView.isTracking || scrollView.isDecelerating else { return }
         let top = -scrollView.adjustedContentInset.top
         let bottom = scrollView.contentSize.height - scrollView.bounds.height + scrollView.adjustedContentInset.bottom
         if new <= top + 8 || new >= bottom - 8 {
