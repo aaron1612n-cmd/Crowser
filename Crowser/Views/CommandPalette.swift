@@ -154,6 +154,10 @@ struct CommandPalette: View {
                 store.prefsChanged()
                 store.current?.webView.reload()
             }),
+            Command(id: "sleep", title: "Sleep Other Tabs", symbol: "moon.zzz", keywords: "memory free unload", run: {
+                store.sleepBackgroundTabs(force: true)
+                store.showToast("Other tabs are asleep")
+            }),
             Command(id: "cookies", title: "Manage Cookies", symbol: "list.bullet.rectangle", keywords: "cookies privacy", run: { store.sheet = .settings }),
             Command(id: "theme", title: "Switch Light / Dark", symbol: "circle.lefthalf.filled", keywords: "theme appearance dark mode", run: {
                 prefs.appearance = prefs.appearance == .dark ? .light : .dark
@@ -187,6 +191,18 @@ struct CommandPalette: View {
             Command(id: "fps", title: tab.showsFPS ? "Hide FPS Counter" : "Show FPS Counter", symbol: "speedometer", keywords: "frames game performance", run: {
                 if !tab.gameMode { tab.toggleGameMode() }
                 tab.toggleFPS()
+            }),
+            Command(id: "pad", title: tab.padOn ? "Hide On-Screen Controls" : "On-Screen Controls", symbol: "dpad", keywords: "joystick gamepad buttons touch game", run: {
+                if !tab.gameMode { tab.toggleGameMode() }
+                tab.togglePad()
+            }),
+            Command(id: "rotate", title: tab.orientation == nil ? "Lock Rotation Here" : "Unlock Rotation Here", symbol: "lock.rotation", keywords: "orientation landscape portrait", run: {
+                if tab.orientation == nil {
+                    let landscape = UIScreen.main.bounds.width > UIScreen.main.bounds.height
+                    tab.setOrientation(landscape ? "landscape" : "portrait")
+                } else {
+                    tab.setOrientation(nil)
+                }
             }),
             Command(id: "dark", title: tab.darkPage ? "Light Page" : "Dark Page", symbol: "moon", keywords: "night invert", run: { tab.toggleDarkPage() }),
             Command(id: "desktop", title: tab.isDesktop ? "Mobile Site" : "Desktop Site", symbol: "desktopcomputer", keywords: "request", run: { tab.toggleDesktop() }),

@@ -49,6 +49,16 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     /// Site-chosen browser identity (nil = Safari).
     @Published private(set) var agentID: String?
     @Published private(set) var keepAwake = false
+    /// Rotation lock for this site: "portrait", "landscape" or nil to follow the phone.
+    @Published var orientation: String?
+    /// On-screen stick and buttons (game mode).
+    @Published var padOn = false
+    /// Asleep: the page is unloaded to save memory, but its back/forward history is kept.
+    @Published private(set) var sleeping = false
+    /// Saved back/forward history and scroll position (WKWebView.interactionState).
+    private var savedState: Any?
+    /// Keys currently held by the on-screen pad or a controller.
+    var heldKeys: Set<GameKey> = []
     @Published var lastActive = Date()
     /// One load with blocking switched off ("Reload without blocking").
     private var bypassBlocking = false
@@ -148,9 +158,53 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
 
     /// Loads a restored tab the first time it comes on screen.
     func activate() {
+        if sleeping || savedState != nil {
+            wake()
+            return
+        }
         guard needsLoad, let url else { return }
         needsLoad = false
         load(url)
+    }
+
+    /// The page's address even while the tab is asleep.
+    var pageURL: URL? { sleeping ? url : (webView.url ?? url) }
+
+    /// History to hand back on the next launch, so restored tabs can still go back.
+    var stateData: Data? {
+        if sleeping || needsLoad { return savedState as? Data }
+        return webView.interactionState as? Data
+    }
+
+    /// Restored tabs bring their back/forward history with them.
+    func restoreState(_ data: Data) {
+        savedState = data
+    }
+
+    /// Frees the page's memory. History, scroll position and the preview stay.
+    func sleep() {
+        guard !sleeping, !needsLoad, url != nil, !isPrivate else { return }
+        webView.requestMediaPlaybackState { [weak self] state in
+            Task { @MainActor in
+                guard let tab = self, state != .playing, !tab.sleeping else { return }
+                tab.savedState = tab.webView.interactionState
+                tab.sleeping = true
+                tab.webView.stopLoading()
+                tab.webView.loadHTMLString("<html><body></body></html>", baseURL: nil)
+            }
+        }
+    }
+
+    private func wake() {
+        needsLoad = false
+        let state = savedState
+        savedState = nil
+        sleeping = false
+        if let state {
+            webView.interactionState = state
+        } else if let url {
+            load(url)
+        }
     }
 
     private static func makeConfiguration(isPrivate: Bool) -> WKWebViewConfiguration {
@@ -344,6 +398,8 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         let agent = setting.agent.flatMap { id in Self.agents.first { $0.id == id } }
         agentID = agent?.id
         keepAwake = setting.awake
+        orientation = setting.orientation
+        padOn = setting.pad
         let wantDesktop = agent?.desktop ?? setting.desktop ?? (UIDevice.current.userInterfaceIdiom == .pad)
         isDesktop = wantDesktop
         let wantAgent = agent?.string ?? (wantDesktop ? Self.desktopAgent : nil)
@@ -458,6 +514,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         }
         if gameMode {
             controller.addUserScript(WKUserScript(source: PageScripts.game, injectionTime: .atDocumentEnd, forMainFrameOnly: false))
+            controller.addUserScript(WKUserScript(source: PageScripts.keys, injectionTime: .atDocumentStart, forMainFrameOnly: false))
             if site.fps {
                 controller.addUserScript(WKUserScript(source: PageScripts.fps, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
             }
@@ -503,10 +560,15 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
 
         rebuildUserScripts()
         if on {
-            if turningOn && !freshPage { webView.evaluateJavaScript(PageScripts.game, completionHandler: nil) }
+            if turningOn && !freshPage {
+                webView.evaluateJavaScript(PageScripts.game, completionHandler: nil)
+                webView.evaluateJavaScript(PageScripts.keys, completionHandler: nil)
+            }
+            store?.quietOthers(for: self)
             setCollapsed(false)
         } else {
             gameBarShown = false
+            releaseKeys()
         }
     }
 
@@ -584,6 +646,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     }
 
     private func sync() {
+        guard !sleeping else { return }
         let newTitle = webView.title ?? ""
         if title != newTitle { title = newTitle }
         if let newURL = webView.url, url != newURL { url = newURL }

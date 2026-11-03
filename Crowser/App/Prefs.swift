@@ -116,6 +116,10 @@ final class Prefs: ObservableObject {
     @Published var swipeTabs: Bool { didSet { save(swipeTabs, "swipeTabs") } }
     /// Private tabs need Face ID (or the passcode) after Crowser has been in the background.
     @Published var lockPrivate: Bool { didSet { save(lockPrivate, "lockPrivate") } }
+    /// Pause sound and video in other tabs while a game-mode tab is on screen.
+    @Published var quietWhileGaming: Bool { didSet { save(quietWhileGaming, "quietWhileGaming") } }
+    /// Minutes before an unused tab sleeps (0 = never). Sleeping tabs keep their history.
+    @Published var sleepAfter: Int { didSet { save(sleepAfter, "sleepAfter") } }
     /// No images, fonts or video: pages load in a fraction of the time on a slow connection.
     @Published var liteMode: Bool { didSet { save(liteMode, "liteMode") } }
     /// Web audio and video keep playing in the background and picture in picture works across apps.
@@ -168,6 +172,8 @@ final class Prefs: ObservableObject {
         swipeTabs = bool("swipeTabs", true)
         lockPrivate = bool("lockPrivate", false)
         liteMode = bool("liteMode", false)
+        quietWhileGaming = bool("quietWhileGaming", true)
+        sleepAfter = d.object(forKey: "crowser.pref.sleepAfter") as? Int ?? 30
         backgroundAudio = bool("backgroundAudio", true)
         if let data = d.data(forKey: "crowser.pref.shortcuts"),
            let saved = try? JSONDecoder().decode([SearchShortcut].self, from: data) {

@@ -24,6 +24,17 @@ struct SiteSetting: Codable, Equatable {
     var note = ""
     /// Keep the screen on while this site is open.
     var awake = false
+    /// Rotation lock: "portrait", "landscape" or nil.
+    var orientation: String?
+    /// On-screen stick and two buttons in game mode.
+    var pad = false
+    /// What the stick presses: "arrows" or "wasd".
+    var padStick = "arrows"
+    /// Keys for the two pad buttons (GameKey raw values).
+    var padA = "space"
+    var padB = "enter"
+    /// A connected controller presses the same keys as the pad, for games without gamepad support.
+    var controllerKeys = false
 
     init() {}
 
@@ -43,6 +54,12 @@ struct SiteSetting: Codable, Equatable {
         agent = try c.decodeIfPresent(String.self, forKey: .agent)
         note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
         awake = try c.decodeIfPresent(Bool.self, forKey: .awake) ?? false
+        orientation = try c.decodeIfPresent(String.self, forKey: .orientation)
+        pad = try c.decodeIfPresent(Bool.self, forKey: .pad) ?? false
+        padStick = try c.decodeIfPresent(String.self, forKey: .padStick) ?? "arrows"
+        padA = try c.decodeIfPresent(String.self, forKey: .padA) ?? "space"
+        padB = try c.decodeIfPresent(String.self, forKey: .padB) ?? "enter"
+        controllerKeys = try c.decodeIfPresent(Bool.self, forKey: .controllerKeys) ?? false
     }
 }
 

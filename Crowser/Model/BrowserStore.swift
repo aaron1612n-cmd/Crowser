@@ -80,6 +80,36 @@ final class BrowserStore: ObservableObject {
 
         Task { await loadContentRules() }
         Task { await runDemoHooks() }
+        ControllerBridge.shared.store = self
+        sleepTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                self?.sleepBackgroundTabs()
+            }
+        }
+    }
+
+    private var sleepTask: Task<Void, Never>?
+
+    // MARK: Sleeping tabs and quiet gaming
+
+    /// Unloads tabs you haven't looked at for a while (or all background tabs when memory runs low).
+    /// They keep their history, scroll position and preview, and wake when you open them.
+    func sleepBackgroundTabs(force: Bool = false) {
+        let minutes = Prefs.shared.sleepAfter
+        guard force || minutes > 0 else { return }
+        let cutoff = Date().addingTimeInterval(-Double(max(minutes, 1)) * 60)
+        for tab in tabs where tab.id != selectedID && !tab.pinned && !tab.sleeping && (force || tab.lastActive < cutoff) {
+            tab.sleep()
+        }
+    }
+
+    /// While a game is on screen, pauses sound and video in every other tab.
+    func quietOthers(for tab: BrowserTab) {
+        guard Prefs.shared.quietWhileGaming, tab.id == selectedID else { return }
+        for other in tabs where other.id != tab.id {
+            other.webView.pauseAllMediaPlayback(completionHandler: nil)
+        }
     }
 
     var current: BrowserTab? {
@@ -142,6 +172,7 @@ final class BrowserStore: ObservableObject {
         if let previous = current { Task { await previous.captureSnapshot(fresh: false) } }
         selectedID = tab.id
         tab.lastActive = Date()
+        if tab.gameMode { quietOthers(for: tab) }
         Haptics.select()
         persist()
     }
@@ -164,7 +195,7 @@ final class BrowserStore: ObservableObject {
     func close(_ tab: BrowserTab) {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
         tab.teardown()
-        if !tab.isPrivate, let page = tab.webView.url ?? tab.url {
+        if !tab.isPrivate, let page = tab.pageURL {
             closedPages.append(page)
             if closedPages.count > 20 { closedPages.removeFirst() }
         }
@@ -228,7 +259,7 @@ final class BrowserStore: ObservableObject {
     }
 
     func duplicate(_ tab: BrowserTab) {
-        guard let page = tab.webView.url ?? tab.url else { return }
+        guard let page = tab.pageURL else { return }
         let copy = BrowserTab(url: page, isPrivate: tab.isPrivate, store: self)
         if let index = tabs.firstIndex(where: { $0.id == tab.id }) {
             tabs.insert(copy, at: index + 1)
@@ -331,7 +362,7 @@ final class BrowserStore: ObservableObject {
     /// Saves the open tabs (only the shown group's, when one is picked) under a name.
     func saveSession(named name: String) {
         let source = tabs.filter { !$0.isPrivate && (activeGroupID == nil || $0.groupID == activeGroupID) }
-        let links = source.compactMap { ($0.webView.url ?? $0.url)?.absoluteString }
+        let links = source.compactMap { $0.pageURL?.absoluteString }
         guard !links.isEmpty else { return }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let fallback = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short)
@@ -514,7 +545,7 @@ final class BrowserStore: ObservableObject {
     /// Saves the non-private tabs so they come back next launch.
     func persist() {
         let saved = tabs.filter { !$0.isPrivate }
-        let links = saved.map { ($0.webView.url ?? $0.url)?.absoluteString ?? "" }
+        let links = saved.map { $0.pageURL?.absoluteString ?? "" }
         let selected = saved.firstIndex { $0.id == selectedID } ?? max(0, saved.count - 1)
         UserDefaults.standard.set(links, forKey: tabsKey)
         UserDefaults.standard.set(saved.map(\.pinned), forKey: tabsKey + ".pinned")
@@ -522,6 +553,24 @@ final class BrowserStore: ObservableObject {
         UserDefaults.standard.set(selected, forKey: selectedKey)
         UserDefaults.standard.set(saved.map { $0.groupID?.uuidString ?? "" }, forKey: tabsKey + ".group")
         saveWorkspace()
+    }
+
+    /// Back/forward history for every tab, kept on disk so restored tabs can still go back.
+    func persistHistory() {
+        let saved = tabs.filter { !$0.isPrivate }
+        var states: [String: Data] = [:]
+        for tab in saved {
+            if let link = tab.pageURL?.absoluteString, let state = tab.stateData { states[link] = state }
+        }
+        if let data = try? PropertyListEncoder().encode(states) {
+            try? data.write(to: Self.historyFile, options: .atomic)
+        }
+    }
+
+    private static var historyFile: URL {
+        let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder.appendingPathComponent("tab-history.plist")
     }
 
     private func restore() {
@@ -534,6 +583,8 @@ final class BrowserStore: ObservableObject {
         let known = Set(groups.map(\.id))
         let selected = defaults.integer(forKey: selectedKey)
         let days = Prefs.shared.autoCloseDays
+        let states = (try? Data(contentsOf: Self.historyFile))
+            .flatMap { try? PropertyListDecoder().decode([String: Data].self, from: $0) } ?? [:]
         var selectedTab: BrowserTab?
         for (index, link) in links.enumerated() {
             let pinned = pins.indices.contains(index) && pins[index]
@@ -546,6 +597,7 @@ final class BrowserStore: ObservableObject {
             let tab = BrowserTab(url: URL(string: link), lazy: true, store: self)
             tab.pinned = pinned
             tab.lastActive = last
+            if let state = states[link] { tab.restoreState(state) }
             if groupIDs.indices.contains(index), let id = UUID(uuidString: groupIDs[index]), known.contains(id) {
                 tab.groupID = id
             }
@@ -584,6 +636,12 @@ final class BrowserStore: ObservableObject {
             sheet = .palette
         case "qrcode":
             sheet = .qrCode
+        case "pad":
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if let tab = current {
+                if !tab.gameMode { tab.toggleGameMode() }
+                if !tab.padOn { tab.togglePad() }
+            }
         case "groups":
             if let first = tabs.first { createGroup(named: "Games", with: first) }
             if tabs.count > 1 { createGroup(named: "Reading", with: tabs[1]) }

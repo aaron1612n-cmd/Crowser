@@ -59,6 +59,7 @@ for kind in iPhone iPad; do
     shoot "$udid" "$label-14-groups" 18 -crowserOpen "$PAGES" -crowserScene groups
     shoot "$udid" "$label-15-palette" 12 -crowserOpen "$PAGE" -crowserScene palette
     shoot "$udid" "$label-16-qrcode" 12 -crowserOpen "$PAGE" -crowserScene qrcode
+    shoot "$udid" "$label-17-pad" 16 -crowserOpen "$PAGE" -crowserScene pad
     shoot "$udid" "$label-13-tucked" 12 -crowserOpen "$PAGE" -crowserScene tucked
     shoot "$udid" "$label-10-shields" 12 -crowserOpen "$PAGE" -crowserScene shields
     shoot "$udid" "$label-11-more-full" 12 -crowserOpen "$PAGE" -crowserScene morefull

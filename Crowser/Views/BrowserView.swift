@@ -67,7 +67,10 @@ struct BrowserView: View {
         }
         .onChange(of: scenePhase) { phase in
             if phase != .active { store.persist() }
-            if phase == .background { store.lockPrivate() }
+            if phase == .background {
+                store.lockPrivate()
+                store.persistHistory()
+            }
         }
     }
 }
@@ -123,7 +126,11 @@ private struct TabStage: View {
                     .zIndex(1)
             }
         }
-        .task(id: tab.id) { tab.activate() }
+        .task(id: tab.id) {
+            tab.activate()
+            OrientationLock.apply(tab.orientation)
+        }
+        .onChange(of: tab.orientation) { OrientationLock.apply($0) }
         .statusBarHidden(tab.gameMode || store.fullscreen)
         .persistentSystemOverlays(tab.gameMode || store.fullscreen ? .hidden : .automatic)
         .animation(Motion.snappy, value: tab.gameMode)
@@ -136,6 +143,11 @@ private struct TabStage: View {
     private var gameOverlay: some View {
         ZStack(alignment: barOnTop ? .top : .bottom) {
             Color.clear.allowsHitTesting(false)
+            if tab.padOn && !tab.gameBarShown && !store.isEditingAddress {
+                GamePad(tab: tab)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .transition(.opacity)
+            }
             if tab.gameBarShown && !store.isEditingAddress {
                 FloatingBar(tab: tab, barOnTop: barOnTop, morph: morph)
                     .padding(barOnTop ? .top : .bottom, 8)

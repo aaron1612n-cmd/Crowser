@@ -297,6 +297,15 @@ struct MorePanel: View {
                         SwitchRow("FPS counter", detail: "Frame rate and recent low, in the top-left corner.", symbol: "speedometer", isOn: tab.showsFPS) {
                             tab.toggleFPS()
                         }
+                        SwitchRow("On-screen controls", detail: "A stick and two buttons that press keys in the game.", symbol: "dpad.fill", isOn: tab.padOn) {
+                            tab.togglePad()
+                        }
+                        if tab.padOn {
+                            padKeys
+                        }
+                        SwitchRow("Controller presses keys", detail: "For games that only know a keyboard. Stick and d-pad move, A and B use the buttons' keys.", symbol: "gamecontroller", isOn: tab.controllerKeys) {
+                            tab.toggleControllerKeys()
+                        }
                     }
                     SwitchRow("Dark page", detail: "Turns light pages dark. Photos stay natural.", symbol: "moon.fill", isOn: tab.darkPage) {
                         tab.toggleDarkPage()
@@ -320,6 +329,20 @@ struct MorePanel: View {
                             detail: BrowserTab.agents.first { $0.id == tab.agentID }?.name ?? "Crowser (Safari)",
                             symbol: "theatermasks.fill",
                             lit: tab.agentID != nil
+                        )
+                    }
+                    Menu {
+                        Picker("Rotation", selection: Binding(get: { tab.orientation ?? "" }, set: { tab.setOrientation($0.isEmpty ? nil : $0) })) {
+                            Text("Follow the phone").tag("")
+                            Text("Always portrait").tag("portrait")
+                            Text("Always landscape").tag("landscape")
+                        }
+                    } label: {
+                        NavRow(
+                            "Rotation",
+                            detail: tab.orientation == "portrait" ? "Locked to portrait" : tab.orientation == "landscape" ? "Locked to landscape" : "Follows the phone",
+                            symbol: "rotate.right.fill",
+                            lit: tab.orientation != nil
                         )
                     }
                     SwitchRow("Keep screen on", detail: "The screen won't dim or lock on this site.", symbol: "sun.max.fill", isOn: tab.keepAwake) {
@@ -354,6 +377,48 @@ struct MorePanel: View {
                     .buttonStyle(PressStyle(scale: 0.98))
                 }
             }
+        }
+
+        /// Which keys the on-screen stick and buttons press.
+        private var padKeys: some View {
+            HStack(spacing: 8) {
+                Menu {
+                    Picker("Stick", selection: Binding(get: { tab.padStick }, set: { tab.setPadStick($0) })) {
+                        Text("Arrow keys").tag("arrows")
+                        Text("W A S D").tag("wasd")
+                    }
+                } label: {
+                    keyChip(title: "Stick", value: tab.padStick == "wasd" ? "WASD" : "Arrows")
+                }
+                Menu {
+                    Picker("Big button", selection: Binding(get: { tab.padA }, set: { tab.setPadButton(a: $0) })) {
+                        ForEach(GameKey.buttonChoices) { Text($0.label).tag($0) }
+                    }
+                } label: {
+                    keyChip(title: "Big", value: tab.padA.label)
+                }
+                Menu {
+                    Picker("Small button", selection: Binding(get: { tab.padB }, set: { tab.setPadButton(b: $0) })) {
+                        ForEach(GameKey.buttonChoices) { Text($0.label).tag($0) }
+                    }
+                } label: {
+                    keyChip(title: "Small", value: tab.padB.label)
+                }
+            }
+            .padding(.vertical, 6)
+        }
+
+        private func keyChip(title: String, value: String) -> some View {
+            VStack(spacing: 2) {
+                Text(title)
+                    .font(Face.ui(11, weight: .semibold))
+                    .foregroundColor(Theme.muted)
+                Text(value)
+                    .font(Face.mono(15).weight(.bold))
+                    .foregroundColor(Theme.text)
+            }
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .background(RoundedRectangle(cornerRadius: Theme.r(12), style: .continuous).fill(Theme.line))
         }
 
         /// Close the panel first, then act, so the next screen doesn't fight the dismissal.

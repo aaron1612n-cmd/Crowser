@@ -82,6 +82,17 @@ struct SettingsSheet: View {
                     Toggle(isOn: $store.collapseOnScroll) {
                         row("Shrink bar while scrolling", symbol: "arrow.down.right.and.arrow.up.left")
                     }
+                    Toggle(isOn: $prefs.quietWhileGaming) {
+                        row("Pause other tabs while gaming", symbol: "speaker.slash")
+                    }
+                    Picker(selection: $prefs.sleepAfter) {
+                        Text("Never").tag(0)
+                        Text("After 10 minutes").tag(10)
+                        Text("After 30 minutes").tag(30)
+                        Text("After an hour").tag(60)
+                    } label: {
+                        row("Sleep unused tabs", symbol: "moon.zzz")
+                    }
                     Picker(selection: $prefs.autoCloseDays) {
                         Text("Never").tag(0)
                         Text("After a day").tag(1)
@@ -93,7 +104,7 @@ struct SettingsSheet: View {
                 } header: {
                     header("Browsing")
                 } footer: {
-                    Text("Unused tabs close the next time you open Crowser and wait under Reopen. Pinned tabs never close on their own.")
+                    Text("Sleeping tabs free their memory but keep their place and back history; they wake when you open them. Unused tabs close the next time you open Crowser and wait under Reopen. Pinned tabs never sleep or close on their own.")
                 }
 
                 Section {

@@ -424,6 +424,12 @@ private struct TabCard: View {
                         .font(.system(size: 10, weight: .bold))
                         .foregroundColor(Theme.ember)
                 }
+                if tab.sleeping {
+                    Image(systemName: "moon.zzz.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(Theme.muted)
+                        .accessibilityLabel("Asleep")
+                }
                 if tab.showsStartPage {
                     Circle().fill(Theme.ember).frame(width: 7, height: 7).padding(.horizontal, 4)
                 } else {
@@ -590,6 +596,9 @@ private struct TabRow: View {
                 HStack(spacing: 5) {
                     if tab.pinned {
                         Image(systemName: "pin.fill").font(.system(size: 10, weight: .bold)).foregroundColor(Theme.ember)
+                    }
+                    if tab.sleeping {
+                        Image(systemName: "moon.zzz.fill").font(.system(size: 10, weight: .bold)).foregroundColor(Theme.muted)
                     }
                     Text(title)
                         .font(Face.ui(15, weight: .semibold))

@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct CrowserApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var library: Library
     @StateObject private var store: BrowserStore
 
