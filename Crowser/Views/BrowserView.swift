@@ -26,10 +26,17 @@ struct BrowserView: View {
             Theme.paper.ignoresSafeArea()
 
             if let tab = store.current {
-                TabStage(tab: tab, barOnTop: barOnTop)
-                    .scaleEffect(store.showingOverview ? 0.9 : 1)
-                    .opacity(store.showingOverview ? 0 : 1)
-                    .allowsHitTesting(!store.showingOverview)
+                HStack(spacing: 0) {
+                    TabStage(tab: tab, barOnTop: barOnTop)
+                    if horizontalSize == .regular, let split = store.splitTab {
+                        Rectangle().fill(Theme.line).frame(width: 1).ignoresSafeArea()
+                        SplitPane(tab: split)
+                            .transition(.move(edge: .trailing).combined(with: .opacity))
+                    }
+                }
+                .scaleEffect(store.showingOverview ? 0.9 : 1)
+                .opacity(store.showingOverview ? 0 : 1)
+                .allowsHitTesting(!store.showingOverview)
             }
 
             if store.showingOverview {
@@ -218,6 +225,52 @@ private struct TabStage: View {
                 }
                 .animation(Motion.quick, value: tab.loadError)
         }
+    }
+}
+
+/// The second tab in iPad split view: the page plus a slim header to swap sides or close it.
+private struct SplitPane: View {
+    @ObservedObject var tab: BrowserTab
+    @EnvironmentObject private var store: BrowserStore
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Favicon(url: tab.url, title: tab.title, size: 18)
+                Text(tab.showsStartPage ? "New tab" : (tab.title.isEmpty ? Address.display(tab.url) : tab.title))
+                    .font(Face.ui(14, weight: .semibold))
+                    .foregroundColor(Theme.text)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Button { store.swapSplit() } label: {
+                    Image(systemName: "arrow.left.arrow.right")
+                        .frame(width: 40, height: 40)
+                }
+                .accessibilityLabel("Swap sides")
+                Button { store.closeSplit() } label: {
+                    Image(systemName: "xmark")
+                        .frame(width: 40, height: 40)
+                }
+                .accessibilityLabel("Close split view")
+            }
+            .font(.system(size: 14, weight: .bold))
+            .foregroundColor(Theme.text)
+            .buttonStyle(PressStyle())
+            .padding(.leading, 14)
+            .padding(.trailing, 6)
+            .frame(height: 56)
+            .background(Theme.paper)
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) { store.swapSplit() }
+
+            if tab.showsStartPage {
+                StartPage(isPrivate: tab.isPrivate, bottomClearance: 24)
+            } else {
+                WebViewContainer(webView: tab.webView)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task(id: tab.id) { tab.activate() }
     }
 }
 

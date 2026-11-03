@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Favorites and history, searchable, with swipe-to-delete.
 struct LibrarySheet: View {
@@ -9,6 +10,7 @@ struct LibrarySheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var shelf: Shelf = .favorites
     @State private var filter = ""
+    @State private var importing = false
 
     private var entries: [Entry] {
         let all = shelf == .favorites ? library.bookmarks : library.history
@@ -54,13 +56,33 @@ struct LibrarySheet: View {
                                         Label("Delete", systemImage: "trash")
                                     }
                                 }
+                                .contextMenu {
+                                    if shelf == .favorites { folderMenu(for: entry) }
+                                }
                             }
                         } header: {
                             if !section.title.isEmpty {
-                                Text(section.title)
-                                    .font(Face.ui(13, weight: .bold))
-                                    .foregroundColor(Theme.muted)
-                                    .textCase(nil)
+                                HStack {
+                                    if shelf == .favorites && section.title != "Not in a folder" {
+                                        Image(systemName: "folder.fill").foregroundColor(Theme.ember)
+                                    }
+                                    Text(section.title)
+                                        .font(Face.ui(13, weight: .bold))
+                                        .foregroundColor(Theme.muted)
+                                        .textCase(nil)
+                                    Spacer()
+                                    if shelf == .favorites && section.title != "Not in a folder" {
+                                        Menu {
+                                            Button { rename(section.title) } label: { Label("Rename", systemImage: "pencil") }
+                                            Button(role: .destructive) { library.deleteFolder(section.title) } label: {
+                                                Label("Remove Folder", systemImage: "folder.badge.minus")
+                                            }
+                                        } label: {
+                                            Image(systemName: "ellipsis.circle").foregroundColor(Theme.muted)
+                                        }
+                                        .accessibilityLabel("Folder options")
+                                    }
+                                }
                             }
                         }
                     }
@@ -77,6 +99,25 @@ struct LibrarySheet: View {
                     Button("Done") { dismiss() }
                         .font(Face.ui(16, weight: .bold))
                 }
+                if shelf == .favorites {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Menu {
+                            Button {
+                                Task {
+                                    if let name = await Presenter.prompt(title: "New folder", message: "Name it, like Games or School", defaultText: nil) {
+                                        library.createFolder(name)
+                                    }
+                                }
+                            } label: { Label("New Folder", systemImage: "folder.badge.plus") }
+                            Button { importing = true } label: {
+                                Label("Import from Safari, Chrome…", systemImage: "square.and.arrow.down")
+                            }
+                        } label: {
+                            Image(systemName: "folder.badge.plus")
+                        }
+                        .accessibilityLabel("Folders and import")
+                    }
+                }
                 if shelf == .history && !library.history.isEmpty {
                     ToolbarItem(placement: .cancellationAction) {
                         Menu("Clear") {
@@ -86,14 +127,57 @@ struct LibrarySheet: View {
                 }
             }
         }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.html, .plainText, .data]) { result in
+            guard case .success(let url) = result else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url),
+                  let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else { return }
+            let count = library.importBookmarks(html: html)
+            Haptics.success()
+            store.showToast(count == 0 ? "Nothing new to import" : "Imported \(count) favorite\(count == 1 ? "" : "s")")
+        }
         .modifier(SheetChrome())
+    }
+
+    @ViewBuilder
+    private func folderMenu(for entry: Entry) -> some View {
+        Menu {
+            Button { library.move(entry.url, toFolder: nil) } label: {
+                Label("Not in a folder", systemImage: entry.folder == nil ? "checkmark" : "tray")
+            }
+            ForEach(library.folders, id: \.self) { folder in
+                Button { library.move(entry.url, toFolder: folder) } label: {
+                    Label(folder, systemImage: entry.folder == folder ? "checkmark" : "folder")
+                }
+            }
+        } label: {
+            Label("Move to Folder", systemImage: "folder")
+        }
+    }
+
+    private func rename(_ folder: String) {
+        Task {
+            if let name = await Presenter.prompt(title: "Rename folder", message: "", defaultText: folder) {
+                library.renameFolder(folder, to: name)
+            }
+        }
     }
 
     private struct Bucket { let title: String; let entries: [Entry] }
 
     /// History is grouped by day; favorites are one list.
     private var sections: [Bucket] {
-        guard shelf == .history else { return [Bucket(title: "", entries: entries)] }
+        guard shelf == .history else {
+            let loose = entries.filter { $0.folder == nil }
+            var buckets: [Bucket] = []
+            if !loose.isEmpty { buckets.append(Bucket(title: library.folders.isEmpty ? "" : "Not in a folder", entries: loose)) }
+            for folder in library.folders {
+                let inside = entries.filter { $0.folder == folder }
+                if !inside.isEmpty || filter.isEmpty { buckets.append(Bucket(title: folder, entries: inside)) }
+            }
+            return buckets
+        }
         let calendar = Calendar.current
         var groups: [Bucket] = []
         for entry in entries {

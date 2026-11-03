@@ -91,6 +91,76 @@ final class BrowserStore: ObservableObject {
 
     private var sleepTask: Task<Void, Never>?
 
+    // MARK: Split view (iPad)
+
+    /// The tab shown beside the current one on iPad.
+    @Published private(set) var splitID: UUID?
+
+    var splitTab: BrowserTab? {
+        guard let splitID, splitID != selectedID else { return nil }
+        return tabs.first { $0.id == splitID }
+    }
+
+    func split(with tab: BrowserTab) {
+        guard tab.id != selectedID else { return }
+        tab.activate()
+        withAnimation(Motion.snappy) { splitID = tab.id }
+        Haptics.thud()
+    }
+
+    /// Puts a second tab beside this one: the last tab you looked at, or a new one.
+    func splitWithRecent() {
+        let other = tabs.filter { $0.id != selectedID && $0.isPrivate == current?.isPrivate }
+            .max { $0.lastActive < $1.lastActive }
+        if let other {
+            split(with: other)
+        } else {
+            let keep = selectedID
+            newTab(focus: false)
+            if let added = current, let keep, let original = tabs.first(where: { $0.id == keep }) {
+                selectedID = original.id
+                split(with: added)
+            }
+        }
+    }
+
+    func swapSplit() {
+        guard let split = splitTab, let current else { return }
+        withAnimation(Motion.snappy) {
+            selectedID = split.id
+            splitID = current.id
+        }
+        Haptics.select()
+    }
+
+    func closeSplit() {
+        withAnimation(Motion.snappy) { splitID = nil }
+    }
+
+    // MARK: Gestures
+
+    func perform(_ action: BarAction) {
+        guard action != .none else { return }
+        Haptics.tap()
+        let tab = current
+        switch action {
+        case .none: break
+        case .tabs: showOverview()
+        case .newTab: newTab()
+        case .privateTab: newTab(isPrivate: true)
+        case .closeTab: closeCurrent()
+        case .reload: tab?.reload()
+        case .back: tab?.goBack()
+        case .top: tab?.scrollToTop()
+        case .commands: sheet = .palette
+        case .reader: tab?.toggleReader()
+        case .hideBar: tuckBar()
+        case .shields: sheet = .shields
+        case .favorite: toggleBookmarkForCurrent()
+        case .find: tab?.findOnPage()
+        }
+    }
+
     // MARK: Sleeping tabs and quiet gaming
 
     /// Unloads tabs you haven't looked at for a while (or all background tabs when memory runs low).
@@ -169,6 +239,7 @@ final class BrowserStore: ObservableObject {
 
     func select(_ tab: BrowserTab) {
         guard tab.id != selectedID else { return }
+        if tab.id == splitID { splitID = selectedID }
         if let previous = current { Task { await previous.captureSnapshot(fresh: false) } }
         selectedID = tab.id
         tab.lastActive = Date()
@@ -636,6 +707,8 @@ final class BrowserStore: ObservableObject {
             sheet = .palette
         case "qrcode":
             sheet = .qrCode
+        case "split":
+            if tabs.count > 1 { selectedID = tabs[0].id; split(with: tabs[1]) }
         case "pad":
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             if let tab = current {

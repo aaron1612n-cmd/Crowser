@@ -69,6 +69,30 @@ enum HomeChoice: String, CaseIterable, Identifiable {
     }
 }
 
+/// Something a bar gesture can do.
+enum BarAction: String, CaseIterable, Identifiable {
+    case none, tabs, newTab, privateTab, closeTab, reload, back, top, commands, reader, hideBar, shields, favorite, find
+    var id: String { rawValue }
+    var name: String {
+        switch self {
+        case .none: return "Nothing"
+        case .tabs: return "Show tabs"
+        case .newTab: return "New tab"
+        case .privateTab: return "New private tab"
+        case .closeTab: return "Close tab"
+        case .reload: return "Reload"
+        case .back: return "Go back"
+        case .top: return "Scroll to top"
+        case .commands: return "Commands"
+        case .reader: return "Reader view"
+        case .hideBar: return "Hide toolbar"
+        case .shields: return "Shields"
+        case .favorite: return "Add to favorites"
+        case .find: return "Find on page"
+        }
+    }
+}
+
 /// Nonisolated reads of the look settings, for drawing code anywhere (Theme, Face, Motion, Haptics).
 enum Look {
     private static var d: UserDefaults { .standard }
@@ -118,6 +142,10 @@ final class Prefs: ObservableObject {
     @Published var showFavorites: Bool { didSet { save(showFavorites, "showFavorites") } }
     @Published var showRecent: Bool { didSet { save(showRecent, "showRecent") } }
     @Published var swipeTabs: Bool { didSet { save(swipeTabs, "swipeTabs") } }
+    /// Custom gestures on the toolbar.
+    @Published var gestureSwipeUp: BarAction { didSet { save(gestureSwipeUp.rawValue, "gestureSwipeUp") } }
+    @Published var gestureDoubleTap: BarAction { didSet { save(gestureDoubleTap.rawValue, "gestureDoubleTap") } }
+    @Published var gestureLongPress: BarAction { didSet { save(gestureLongPress.rawValue, "gestureLongPress") } }
     /// Private tabs need Face ID (or the passcode) after Crowser has been in the background.
     @Published var lockPrivate: Bool { didSet { save(lockPrivate, "lockPrivate") } }
     /// Pause sound and video in other tabs while a game-mode tab is on screen.
@@ -176,6 +204,9 @@ final class Prefs: ObservableObject {
         showFavorites = bool("showFavorites", true)
         showRecent = bool("showRecent", true)
         swipeTabs = bool("swipeTabs", true)
+        gestureSwipeUp = BarAction(rawValue: string("gestureSwipeUp") ?? "") ?? .tabs
+        gestureDoubleTap = BarAction(rawValue: string("gestureDoubleTap") ?? "") ?? .none
+        gestureLongPress = BarAction(rawValue: string("gestureLongPress") ?? "") ?? .commands
         lockPrivate = bool("lockPrivate", false)
         liteMode = bool("liteMode", false)
         quietWhileGaming = bool("quietWhileGaming", true)

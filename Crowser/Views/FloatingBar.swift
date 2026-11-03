@@ -35,6 +35,8 @@ struct FloatingBar: View {
                         if collapsed || barOnTop || tab.showsStartPage { store.tuckBar() } else { store.collapseBar() }
                     } else if dy < -26 && collapsed {
                         tab.setCollapsed(false)
+                    } else if dy < -26 {
+                        store.perform(Prefs.shared.gestureSwipeUp)
                     }
                 }
         )
@@ -146,7 +148,7 @@ struct FloatingBar: View {
         )
         .offset(x: swipe)
         .contentShape(Rectangle())
-        .onTapGesture { store.beginEditing() }
+        .modifier(BarTaps(store: store))
         .gesture(swipeTabs, including: Prefs.shared.swipeTabs ? .all : .subviews)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(tab.url == nil ? "Search or enter address" : "Address, \(addressText)")
@@ -330,5 +332,27 @@ struct LoadLine: View {
     private var fraction: CGFloat {
         guard isLoading else { return visible ? 1 : 0 }
         return CGFloat(max(progress, 0.08))
+    }
+}
+
+/// Tap to type an address, plus the double-tap and long-press you chose in Settings.
+/// Double-tap is only listened for when it does something, so a single tap never waits.
+private struct BarTaps: ViewModifier {
+    let store: BrowserStore
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let prefs = Prefs.shared
+        let base = content
+            .onLongPressGesture(minimumDuration: 0.45) {
+                if prefs.gestureLongPress != .none { store.perform(prefs.gestureLongPress) }
+            }
+        if prefs.gestureDoubleTap != .none {
+            base
+                .onTapGesture(count: 2) { store.perform(prefs.gestureDoubleTap) }
+                .onTapGesture { store.beginEditing() }
+        } else {
+            base.onTapGesture { store.beginEditing() }
+        }
     }
 }

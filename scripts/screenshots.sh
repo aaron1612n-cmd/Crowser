@@ -63,6 +63,8 @@ for kind in iPhone iPad; do
     shoot "$udid" "$label-13-tucked" 12 -crowserOpen "$PAGE" -crowserScene tucked
     shoot "$udid" "$label-10-shields" 12 -crowserOpen "$PAGE" -crowserScene shields
     shoot "$udid" "$label-11-more-full" 12 -crowserOpen "$PAGE" -crowserScene morefull
+  else
+    shoot "$udid" "$label-5-split" 18 -crowserOpen "$PAGES" -crowserScene split
   fi
   xcrun simctl ui "$udid" appearance dark
   shoot "$udid" "$label-8-start-dark" 8

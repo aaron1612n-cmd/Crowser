@@ -157,6 +157,9 @@ struct CommandPalette: View {
             Command(id: "backup", title: "Back Up Everything", symbol: "externaldrive.badge.plus", keywords: "export settings save", run: {
                 if let file = Backup.export() { Presenter.share([file]) }
             }),
+            Command(id: "split", title: store.splitTab == nil ? "Split View" : "Close Split View", symbol: "rectangle.split.2x1", keywords: "side by side two tabs ipad", run: {
+                if store.splitTab == nil { store.splitWithRecent() } else { store.closeSplit() }
+            }),
             Command(id: "sleep", title: "Sleep Other Tabs", symbol: "moon.zzz", keywords: "memory free unload", run: {
                 store.sleepBackgroundTabs(force: true)
                 store.showToast("Other tabs are asleep")

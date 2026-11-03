@@ -85,6 +85,21 @@ struct SettingsSheet: View {
                     Toggle(isOn: $prefs.swipeTabs) {
                         row("Swipe the bar to switch tabs", symbol: "hand.draw")
                     }
+                    Picker(selection: $prefs.gestureSwipeUp) {
+                        ForEach(BarAction.allCases) { Text($0.name).tag($0) }
+                    } label: {
+                        row("Swipe up on the bar", symbol: "hand.point.up")
+                    }
+                    Picker(selection: $prefs.gestureDoubleTap) {
+                        ForEach(BarAction.allCases) { Text($0.name).tag($0) }
+                    } label: {
+                        row("Double-tap the bar", symbol: "hand.tap")
+                    }
+                    Picker(selection: $prefs.gestureLongPress) {
+                        ForEach(BarAction.allCases) { Text($0.name).tag($0) }
+                    } label: {
+                        row("Hold the bar", symbol: "hand.point.up.left")
+                    }
                     Toggle(isOn: $store.collapseOnScroll) {
                         row("Shrink bar while scrolling", symbol: "arrow.down.right.and.arrow.up.left")
                     }

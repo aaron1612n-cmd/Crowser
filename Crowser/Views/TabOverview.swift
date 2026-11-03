@@ -456,6 +456,12 @@ private struct TabCard: View {
             }
             Button { store.duplicate(tab) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
             if !tab.isPrivate { GroupMenu(tab: tab, store: store) }
+            if UIDevice.current.userInterfaceIdiom == .pad && tab.id != store.selectedID {
+                Button {
+                    store.split(with: tab)
+                    store.hideOverview()
+                } label: { Label("Open in Split View", systemImage: "rectangle.split.2x1") }
+            }
             if let url = tab.url {
                 Button {
                     UIPasteboard.general.url = url
@@ -637,6 +643,12 @@ private struct TabRow: View {
             Button { store.togglePin(tab) } label: { Label(tab.pinned ? "Unpin Tab" : "Pin Tab", systemImage: tab.pinned ? "pin.slash" : "pin") }
             Button { store.duplicate(tab) } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
             if !tab.isPrivate { GroupMenu(tab: tab, store: store) }
+            if UIDevice.current.userInterfaceIdiom == .pad && tab.id != store.selectedID {
+                Button {
+                    store.split(with: tab)
+                    store.hideOverview()
+                } label: { Label("Open in Split View", systemImage: "rectangle.split.2x1") }
+            }
             Divider()
             Button(role: .destructive) { store.closeOthers(than: tab) } label: { Label("Close Other Tabs", systemImage: "xmark.square") }
             Button(role: .destructive, action: close) { Label("Close Tab", systemImage: "xmark") }

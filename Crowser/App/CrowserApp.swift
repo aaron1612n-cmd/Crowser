@@ -67,6 +67,8 @@ struct CrowserApp: App {
                     .keyboardShortcut("f")
                 Button("Command Palette") { store.sheet = .palette }
                     .keyboardShortcut("k")
+                Button("Split View") { store.splitTab == nil ? store.splitWithRecent() : store.closeSplit() }
+                    .keyboardShortcut("\\", modifiers: [.command, .option])
                 Button("Show or Hide Toolbar") { store.toggleTuck() }
                     .keyboardShortcut("b", modifiers: [.command, .shift])
                 Button("Shields") { store.sheet = .shields }
