@@ -101,6 +101,10 @@ final class Prefs: ObservableObject {
     @Published var highContrast: Bool { didSet { save(highContrast, "highContrast") } }
     @Published var reduceMotion: Bool { didSet { save(reduceMotion, "reduceMotion") } }
     @Published var haptics: Bool { didSet { save(haptics, "haptics") } }
+    /// Bumped whenever the start page wallpaper changes (0 = none).
+    @Published var wallpaperVersion: Int { didSet { save(wallpaperVersion, "wallpaperVersion") } }
+    /// How much paper shows over the wallpaper, 0.1 to 0.85, so text stays readable.
+    @Published var wallpaperDim: Double { didSet { save(wallpaperDim, "wallpaperDim") } }
 
     // MARK: Browsing
 
@@ -161,6 +165,8 @@ final class Prefs: ObservableObject {
         highContrast = bool("highContrast", false)
         reduceMotion = bool("reduceMotion", false)
         haptics = bool("haptics", true)
+        wallpaperVersion = d.object(forKey: "crowser.pref.wallpaperVersion") as? Int ?? 0
+        wallpaperDim = double("wallpaperDim", 0.45)
 
         home = HomeChoice(rawValue: string("home") ?? "") ?? .start
         homeURL = string("homeURL") ?? ""

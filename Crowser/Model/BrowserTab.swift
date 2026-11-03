@@ -57,6 +57,9 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     @Published private(set) var sleeping = false
     /// Saved back/forward history and scroll position (WKWebView.interactionState).
     private var savedState: Any?
+    /// Watching the page: it reloads on the auto-refresh timer and you hear about it when the text changes.
+    @Published private(set) var watching = false
+    private var watchHash: Int?
     /// Keys currently held by the on-screen pad or a controller.
     var heldKeys: Set<GameKey> = []
     @Published var lastActive = Date()
@@ -183,7 +186,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
 
     /// Frees the page's memory. History, scroll position and the preview stay.
     func sleep() {
-        guard !sleeping, !needsLoad, url != nil, !isPrivate else { return }
+        guard !sleeping, !needsLoad, url != nil, !isPrivate, !watching, autoRefresh == 0 else { return }
         webView.requestMediaPlaybackState { [weak self] state in
             Task { @MainActor in
                 guard let tab = self, state != .playing, !tab.sleeping else { return }
@@ -286,6 +289,39 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     }
 
     func setReader(_ on: Bool) { readerOn = on }
+
+    func toggleWatch() {
+        watching.toggle()
+        watchHash = nil
+        if watching {
+            if autoRefresh == 0 { setAutoRefresh(60) }
+            checkForChanges()
+            store?.showToast("Watching \(Address.display(url)) while Crowser is open")
+        } else {
+            setAutoRefresh(0)
+        }
+        Haptics.select()
+    }
+
+    /// Compares the page's visible text with last time.
+    private func checkForChanges() {
+        guard watching else { return }
+        webView.evaluateJavaScript("document.body ? document.body.innerText : ''") { [weak self] result, _ in
+            Task { @MainActor in
+                guard let tab = self, tab.watching, let text = result as? String, !text.isEmpty else { return }
+                let hash = text.hashValue
+                if let old = tab.watchHash, old != hash {
+                    Haptics.success()
+                    tab.store?.showToast("\(Address.display(tab.url)) changed", action: (title: "Show", run: { [weak tab] in
+                        guard let tab else { return }
+                        tab.store?.hideOverview()
+                        tab.store?.select(tab)
+                    }))
+                }
+                tab.watchHash = hash
+            }
+        }
+    }
 
     /// Tells this site Crowser is another browser (nil goes back to Safari).
     func setAgent(_ id: String?) {
@@ -755,6 +791,7 @@ extension BrowserTab: WKNavigationDelegate {
             bypassBlocking = false
             refreshContentRules()
         }
+        checkForChanges()
         guard !isPrivate, let url = webView.url, url.scheme?.hasPrefix("http") == true else { return }
         store?.library.recordVisit(title: webView.title ?? "", url: url)
         store?.persist()

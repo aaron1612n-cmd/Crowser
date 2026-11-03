@@ -134,6 +134,12 @@ struct MorePanel: View {
                             tab.webView.reload()
                             Haptics.select()
                         }
+                        ActionTile("Save video", symbol: "arrow.down.circle", enabled: hasPage) {
+                            after { tab.saveMedia() }
+                        }
+                        ActionTile(tab.watching ? "Watching" : "Watch", symbol: tab.watching ? "eye.fill" : "eye", highlighted: tab.watching, enabled: hasPage) {
+                            tab.toggleWatch()
+                        }
                         ActionTile("Notes", symbol: tab.note.isEmpty ? "note.text" : "note.text.badge.plus", highlighted: !tab.note.isEmpty, enabled: hasPage) {
                             after { store.sheet = .note }
                         }

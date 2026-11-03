@@ -154,6 +154,9 @@ struct CommandPalette: View {
                 store.prefsChanged()
                 store.current?.webView.reload()
             }),
+            Command(id: "backup", title: "Back Up Everything", symbol: "externaldrive.badge.plus", keywords: "export settings save", run: {
+                if let file = Backup.export() { Presenter.share([file]) }
+            }),
             Command(id: "sleep", title: "Sleep Other Tabs", symbol: "moon.zzz", keywords: "memory free unload", run: {
                 store.sleepBackgroundTabs(force: true)
                 store.showToast("Other tabs are asleep")
@@ -182,6 +185,8 @@ struct CommandPalette: View {
             Command(id: "aloud", title: "Read Aloud", symbol: "speaker.wave.2", keywords: "speak voice", run: { tab.readAloud() }),
             Command(id: "shot", title: "Full-Page Screenshot", symbol: "camera.viewfinder", keywords: "capture image whole", run: { tab.fullPageScreenshot() }),
             Command(id: "qr", title: "Show QR Code for Page", symbol: "qrcode", keywords: "share qr", run: { store.sheet = .qrCode }),
+            Command(id: "media", title: "Save Video or Audio", symbol: "arrow.down.circle", keywords: "download media mp4 music", run: { tab.saveMedia() }),
+            Command(id: "watch", title: tab.watching ? "Stop Watching Page" : "Watch Page for Changes", symbol: "eye", keywords: "monitor alert change refresh", run: { tab.toggleWatch() }),
             Command(id: "note", title: "Notes for This Site", symbol: "note.text", keywords: "memo write", run: { store.sheet = .note }),
             Command(id: "awake", title: tab.keepAwake ? "Let Screen Sleep Here" : "Keep Screen On Here", symbol: "sun.max", keywords: "awake dim lock", run: { tab.toggleKeepAwake() }),
             Command(id: "pdf", title: "Save as PDF", symbol: "doc.richtext", keywords: "export print", run: { tab.saveAsPDF() }),

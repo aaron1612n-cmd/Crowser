@@ -53,7 +53,20 @@ struct StartPage: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .calmScroll()
-        .background(Theme.paper)
+        .background {
+            ZStack {
+                Theme.paper
+                if !isPrivate, let wallpaper = Wallpaper.image(version: prefs.wallpaperVersion) {
+                    Image(uiImage: wallpaper)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipped()
+                    Theme.paper.opacity(prefs.wallpaperDim)
+                }
+            }
+            .ignoresSafeArea()
+        }
         .onAppear { withAnimation(Motion.soft) { appeared = true } }
     }
 

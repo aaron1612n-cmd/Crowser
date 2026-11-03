@@ -7,8 +7,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.8.0"
-    CURRENT_PROJECT_VERSION: "10"
+    MARKETING_VERSION: "0.9.0"
+    CURRENT_PROJECT_VERSION: "11"
 targets:
   Crowser:
     type: application
@@ -23,6 +23,7 @@ targets:
         PRODUCT_NAME: Crowser
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-Paper AppIcon-Moss AppIcon-Signal AppIcon-Bone AppIcon-Ember"
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_PREVIEWS: YES

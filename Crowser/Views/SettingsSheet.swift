@@ -1,4 +1,6 @@
+import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 import WebKit
 
 struct SettingsSheet: View {
@@ -10,6 +12,10 @@ struct SettingsSheet: View {
     @AppStorage(SearchEngine.storageKey) private var engine: SearchEngine = .duckDuckGo
     @State private var clearedData = false
     @State private var confirmClear = false
+    @State private var wallpaperItem: PhotosPickerItem?
+    @State private var icon: AppIconChoice = .shield
+    @State private var importing = false
+    @State private var restoredCount: Int?
 
     private var version: String {
         let info = Bundle.main.infoDictionary
@@ -164,6 +170,23 @@ struct SettingsSheet: View {
                 }
 
                 Section {
+                    Button {
+                        if let file = Backup.export() { Presenter.share([file]) }
+                    } label: {
+                        row("Back up everything", symbol: "externaldrive.badge.plus")
+                    }
+                    Button {
+                        importing = true
+                    } label: {
+                        row("Restore from a backup", symbol: "arrow.down.doc", detail: restoredCount.map { "\($0) restored" })
+                    }
+                } header: {
+                    header("Backup")
+                } footer: {
+                    Text("Settings, favorites, history, site settings, groups and sessions in one file. Save it to Files or iCloud Drive. After restoring, close Crowser from the app switcher and open it again.")
+                }
+
+                Section {
                     HStack {
                         HStack(alignment: .lastTextBaseline, spacing: 0) {
                             Text("Crowser").font(Face.title(20, weight: .bold))
@@ -195,6 +218,12 @@ struct SettingsSheet: View {
             .onChange(of: prefs.darkPages) { _ in store.prefsChanged() }
             .onChange(of: prefs.liteMode) { _ in store.prefsChanged() }
             .onChange(of: prefs.lockPrivate) { on in if on { store.keepPrivateUnlockedForNow() } }
+            .fileImporter(isPresented: $importing, allowedContentTypes: [.data, .propertyList]) { result in
+                if case .success(let url) = result {
+                    restoredCount = Backup.restore(from: url)
+                    if restoredCount == nil { store.showToast("That isn't a Crowser backup") } else { Haptics.success() }
+                }
+            }
             .confirmationDialog("Clear all history?", isPresented: $confirmClear, titleVisibility: .visible) {
                 Button("Clear history", role: .destructive) {
                     library.clearHistory()
@@ -233,6 +262,63 @@ struct SettingsSheet: View {
                         .accessibilityLabel(choice.name)
                         .accessibilityAddTraits(prefs.accent == choice ? .isSelected : [])
                     }
+                }
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                row("App icon", symbol: "app.badge", detail: icon.name)
+                HStack(spacing: 0) {
+                    ForEach(AppIconChoice.allCases) { choice in
+                        Button {
+                            Haptics.select()
+                            icon = choice
+                            choice.apply()
+                        } label: {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(Color(uiColor: .hex(choice.swatch.bg)))
+                                .frame(width: 34, height: 34)
+                                .overlay(
+                                    Image(systemName: "shield.fill")
+                                        .font(.system(size: 17, weight: .bold))
+                                        .foregroundColor(Color(uiColor: .hex(choice.swatch.mark)))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(Theme.text, lineWidth: icon == choice ? 2.5 : 0)
+                                        .padding(-4)
+                                )
+                                .frame(maxWidth: .infinity, minHeight: 46)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(choice.name) icon")
+                        .accessibilityAddTraits(icon == choice ? .isSelected : [])
+                    }
+                }
+            }
+            .onAppear { icon = AppIconChoice.current }
+            PhotosPicker(selection: $wallpaperItem, matching: .images) {
+                row("Start page wallpaper", symbol: "photo", detail: prefs.wallpaperVersion > 0 ? "On" : "None")
+            }
+            .onChange(of: wallpaperItem) { item in
+                guard let item else { return }
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self), Wallpaper.save(data) {
+                        prefs.wallpaperVersion += 1
+                        Haptics.success()
+                    }
+                    wallpaperItem = nil
+                }
+            }
+            if prefs.wallpaperVersion > 0 {
+                VStack(alignment: .leading, spacing: 6) {
+                    row("Wallpaper softness", symbol: "circle.lefthalf.striped.horizontal", detail: "\(Int(prefs.wallpaperDim * 100))%")
+                    Slider(value: $prefs.wallpaperDim, in: 0.1...0.85)
+                }
+                Button(role: .destructive) {
+                    Wallpaper.remove()
+                    prefs.wallpaperVersion = 0
+                } label: {
+                    row("Remove wallpaper", symbol: "xmark.circle")
                 }
             }
             Picker(selection: $prefs.barStyle) {
