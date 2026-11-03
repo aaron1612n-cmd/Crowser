@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 @main
@@ -8,6 +9,11 @@ struct CrowserApp: App {
     init() {
         // A roomier shared cache keeps favicons and suggestions instant after the first load.
         URLCache.shared = URLCache(memoryCapacity: 24 * 1024 * 1024, diskCapacity: 150 * 1024 * 1024)
+        // Lets videos and music from web pages keep playing with the screen off or in another app,
+        // and lets picture in picture float over other apps.
+        if UserDefaults.standard.object(forKey: "crowser.pref.backgroundAudio") as? Bool ?? true {
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        }
         let library = Library()
         _library = StateObject(wrappedValue: library)
         _store = StateObject(wrappedValue: BrowserStore(library: library))
@@ -58,6 +64,8 @@ struct CrowserApp: App {
                     .keyboardShortcut("y")
                 Button("Find on Page") { store.current?.findOnPage() }
                     .keyboardShortcut("f")
+                Button("Command Palette") { store.sheet = .palette }
+                    .keyboardShortcut("k")
                 Button("Show or Hide Toolbar") { store.toggleTuck() }
                     .keyboardShortcut("b", modifiers: [.command, .shift])
                 Button("Shields") { store.sheet = .shields }

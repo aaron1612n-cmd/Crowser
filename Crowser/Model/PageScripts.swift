@@ -254,6 +254,59 @@ enum PageScripts {
     })();
     """#
 
+    /// Picture in picture for the biggest video on the page (or back to inline if it's already floating).
+    static let pictureInPicture = #"""
+    (function () {
+      var videos = Array.prototype.slice.call(document.querySelectorAll('video'));
+      if (!videos.length) return 'none';
+      videos.sort(function (a, b) { return (b.videoWidth * b.videoHeight) - (a.videoWidth * a.videoHeight); });
+      var v = videos.find(function (x) { return !x.paused; }) || videos[0];
+      try {
+        if (v.webkitSupportsPresentationMode && v.webkitSupportsPresentationMode('picture-in-picture')) {
+          v.webkitSetPresentationMode(v.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture');
+          return 'ok';
+        }
+        if (document.pictureInPictureEnabled) {
+          if (document.pictureInPictureElement) document.exitPictureInPicture(); else v.requestPictureInPicture();
+          return 'ok';
+        }
+      } catch (e) { return 'error'; }
+      return 'unsupported';
+    })();
+    """#
+
+    static let selectedText = "(window.getSelection ? window.getSelection().toString() : '').trim().slice(0, 120)"
+
+    /// Game mode frame counter: a small readout in the top-left corner that never takes touches.
+    static let fps = #"""
+    (function () {
+      if (window.__crowserFPS) return;
+      window.__crowserFPS = true;
+      var d = document.createElement('div');
+      d.id = 'crowser-fps';
+      d.style.cssText = 'position:fixed;top:8px;left:8px;z-index:2147483647;font:700 12px ui-monospace,Menlo,monospace;'
+        + 'color:#F3EFE7;background:rgba(23,22,20,.78);padding:4px 8px 4px 7px;border-radius:8px;'
+        + 'border-left:3px solid #E2531F;pointer-events:none;letter-spacing:.02em;font-variant-numeric:tabular-nums';
+      d.textContent = '-- FPS';
+      var frames = 0, last = performance.now(), low = 999;
+      function tick(now) {
+        frames++;
+        if (now - last >= 500) {
+          var fps = Math.round(frames * 1000 / (now - last));
+          low = Math.min(low, fps);
+          d.textContent = fps + ' FPS  ·  low ' + low;
+          d.style.borderLeftColor = fps >= 55 ? '#5E8C3A' : (fps >= 30 ? '#C9932B' : '#E2531F');
+          frames = 0; last = now;
+        }
+        requestAnimationFrame(tick);
+      }
+      function add() { (document.body || document.documentElement).appendChild(d); }
+      if (document.body) add(); else document.addEventListener('DOMContentLoaded', add);
+      setInterval(function () { low = 999; }, 10000);
+      requestAnimationFrame(tick);
+    })();
+    """#
+
     static let stopZapper = #"""
     (function () {
       if (!window.__crowserZap) return;

@@ -5,7 +5,7 @@ import WebKit
 @MainActor
 final class BrowserStore: ObservableObject {
     enum Sheet: String, Identifiable {
-        case library, settings, more, shields, siteCode
+        case library, settings, more, shields, siteCode, palette
         var id: String { rawValue }
     }
 
@@ -16,6 +16,10 @@ final class BrowserStore: ObservableObject {
     @Published var isEditingAddress = false
     @Published var addressDraft = ""
     @Published private(set) var toast: String?
+    /// Tab groups, and the one the overview is showing (nil shows every tab).
+    @Published private(set) var groups: [TabGroup] = []
+    @Published var activeGroupID: UUID?
+    @Published private(set) var sessions: [SavedSession] = []
     /// The bar is tucked away to a small ember pull tab until you bring it back.
     @Published private(set) var barTucked = false
 
@@ -93,6 +97,7 @@ final class BrowserStore: ObservableObject {
             }
         }
         let tab = BrowserTab(url: url, isPrivate: isPrivate, store: self)
+        if !isPrivate { tab.groupID = activeGroupID }
         tabs.append(tab)
         selectedID = tab.id
         showingOverview = false
@@ -126,7 +131,7 @@ final class BrowserStore: ObservableObject {
 
     func select(_ tab: BrowserTab) {
         guard tab.id != selectedID else { return }
-        if let previous = current { Task { await previous.captureSnapshot() } }
+        if let previous = current { Task { await previous.captureSnapshot(fresh: false) } }
         selectedID = tab.id
         tab.lastActive = Date()
         Haptics.select()
@@ -226,11 +231,126 @@ final class BrowserStore: ObservableObject {
         tabs.forEach { $0.reapplyPrefs() }
     }
 
+    /// Opens the overview straight away; the current tab's preview fills in a moment later.
     func showOverview() {
         endEditing()
-        Task {
-            await current?.captureSnapshot()
-            withAnimation(Motion.soft) { showingOverview = true }
+        let tab = current
+        Task { await tab?.captureSnapshot(fresh: false) }
+        withAnimation(Motion.soft) { showingOverview = true }
+    }
+
+    // MARK: Groups
+
+    @discardableResult
+    func createGroup(named name: String, with tab: BrowserTab? = nil) -> TabGroup {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let group = TabGroup(name: trimmed.isEmpty ? "Group \(groups.count + 1)" : trimmed, tone: groups.count % 6)
+        groups.append(group)
+        tab?.groupID = group.id
+        activeGroupID = group.id
+        Haptics.success()
+        persist()
+        return group
+    }
+
+    func move(_ tab: BrowserTab, to group: TabGroup?) {
+        tab.groupID = group?.id
+        objectWillChange.send()
+        Haptics.select()
+        showToast(group.map { "Moved to \($0.name)" } ?? "Removed from group")
+        persist()
+    }
+
+    func renameGroup(_ group: TabGroup, to name: String) {
+        guard let index = groups.firstIndex(of: group) else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        groups[index].name = trimmed
+        persist()
+    }
+
+    func recolorGroup(_ group: TabGroup) {
+        guard let index = groups.firstIndex(of: group) else { return }
+        groups[index].tone = (groups[index].tone + 1) % 6
+        Haptics.select()
+        persist()
+    }
+
+    /// Removes the group; its tabs stay open, ungrouped.
+    func ungroup(_ group: TabGroup) {
+        tabs.filter { $0.groupID == group.id }.forEach { $0.groupID = nil }
+        groups.removeAll { $0.id == group.id }
+        if activeGroupID == group.id { activeGroupID = nil }
+        persist()
+    }
+
+    func closeGroup(_ group: TabGroup) {
+        let doomed = tabs.filter { $0.groupID == group.id }
+        doomed.forEach { $0.teardown() }
+        let ids = Set(doomed.map(\.id))
+        tabs.removeAll { ids.contains($0.id) }
+        groups.removeAll { $0.id == group.id }
+        if activeGroupID == group.id { activeGroupID = nil }
+        if tabs.isEmpty { newTab(focus: false) } else if !tabs.contains(where: { $0.id == selectedID }) { selectedID = tabs.last?.id }
+        Haptics.thud()
+        persist()
+    }
+
+    func group(for tab: BrowserTab) -> TabGroup? {
+        guard let id = tab.groupID else { return nil }
+        return groups.first { $0.id == id }
+    }
+
+    // MARK: Sessions
+
+    /// Saves the open tabs (only the shown group's, when one is picked) under a name.
+    func saveSession(named name: String) {
+        let source = tabs.filter { !$0.isPrivate && (activeGroupID == nil || $0.groupID == activeGroupID) }
+        let links = source.compactMap { ($0.webView.url ?? $0.url)?.absoluteString }
+        guard !links.isEmpty else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallback = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short)
+        sessions.insert(SavedSession(name: trimmed.isEmpty ? fallback : trimmed, links: links), at: 0)
+        saveWorkspace()
+        Haptics.success()
+        showToast("Saved \(links.count) tab\(links.count == 1 ? "" : "s")")
+    }
+
+    /// Reopens a session as its own group. Tabs load when you look at them.
+    func openSession(_ session: SavedSession) {
+        let group = TabGroup(name: session.name, tone: groups.count % 6)
+        groups.append(group)
+        var first: BrowserTab?
+        for link in session.links {
+            let tab = BrowserTab(url: URL(string: link), lazy: true, store: self)
+            tab.groupID = group.id
+            tabs.append(tab)
+            if first == nil { first = tab }
+        }
+        activeGroupID = group.id
+        if let first { selectedID = first.id }
+        Haptics.success()
+        persist()
+    }
+
+    func deleteSession(_ session: SavedSession) {
+        sessions.removeAll { $0.id == session.id }
+        saveWorkspace()
+    }
+
+    private func saveWorkspace() {
+        let defaults = UserDefaults.standard
+        if let data = try? JSONEncoder().encode(groups) { defaults.set(data, forKey: "crowser.groups") }
+        if let data = try? JSONEncoder().encode(sessions) { defaults.set(data, forKey: "crowser.sessions") }
+    }
+
+    private func loadWorkspace() {
+        let defaults = UserDefaults.standard
+        if let data = defaults.data(forKey: "crowser.groups"), let saved = try? JSONDecoder().decode([TabGroup].self, from: data) {
+            groups = saved
+        }
+        if let data = defaults.data(forKey: "crowser.sessions"), let saved = try? JSONDecoder().decode([SavedSession].self, from: data) {
+            sessions = saved
         }
     }
 
@@ -331,6 +451,8 @@ final class BrowserStore: ObservableObject {
         UserDefaults.standard.set(saved.map(\.pinned), forKey: tabsKey + ".pinned")
         UserDefaults.standard.set(saved.map { $0.lastActive.timeIntervalSince1970 }, forKey: tabsKey + ".active")
         UserDefaults.standard.set(selected, forKey: selectedKey)
+        UserDefaults.standard.set(saved.map { $0.groupID?.uuidString ?? "" }, forKey: tabsKey + ".group")
+        saveWorkspace()
     }
 
     private func restore() {
@@ -338,6 +460,9 @@ final class BrowserStore: ObservableObject {
         let links = defaults.stringArray(forKey: tabsKey) ?? []
         let pins = defaults.array(forKey: tabsKey + ".pinned") as? [Bool] ?? []
         let active = defaults.array(forKey: tabsKey + ".active") as? [Double] ?? []
+        let groupIDs = defaults.stringArray(forKey: tabsKey + ".group") ?? []
+        loadWorkspace()
+        let known = Set(groups.map(\.id))
         let selected = defaults.integer(forKey: selectedKey)
         let days = Prefs.shared.autoCloseDays
         var selectedTab: BrowserTab?
@@ -352,6 +477,9 @@ final class BrowserStore: ObservableObject {
             let tab = BrowserTab(url: URL(string: link), lazy: true, store: self)
             tab.pinned = pinned
             tab.lastActive = last
+            if groupIDs.indices.contains(index), let id = UUID(uuidString: groupIDs[index]), known.contains(id) {
+                tab.groupID = id
+            }
             tabs.append(tab)
             if index == selected { selectedTab = tab }
         }
@@ -383,6 +511,18 @@ final class BrowserStore: ObservableObject {
             sheet = .settings
         case "tucked":
             tuckBar()
+        case "palette":
+            sheet = .palette
+        case "groups":
+            if let first = tabs.first { createGroup(named: "Games", with: first) }
+            if tabs.count > 1 { createGroup(named: "Reading", with: tabs[1]) }
+            activeGroupID = nil
+            for tab in tabs {
+                selectedID = tab.id
+                try? await Task.sleep(nanoseconds: 700_000_000)
+                await tab.captureSnapshot()
+            }
+            showOverview()
         case "shields":
             sheet = .shields
         case "morefull":

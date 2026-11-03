@@ -73,6 +73,9 @@ struct SettingsSheet: View {
                     Toggle(isOn: $prefs.linksInBackground) {
                         row("Open links in background", symbol: "square.stack")
                     }
+                    Toggle(isOn: $prefs.backgroundAudio) {
+                        row("Keep audio playing in background", symbol: "speaker.wave.2")
+                    }
                     Toggle(isOn: $prefs.swipeTabs) {
                         row("Swipe the bar to switch tabs", symbol: "hand.draw")
                     }

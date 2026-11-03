@@ -45,6 +45,7 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     /// Seconds between automatic reloads, 0 for off.
     @Published private(set) var autoRefresh = 0
     @Published var pinned = false
+    @Published var groupID: UUID?
     @Published var lastActive = Date()
     /// One load with blocking switched off ("Reload without blocking").
     private var bypassBlocking = false
@@ -410,6 +411,9 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         }
         if gameMode {
             controller.addUserScript(WKUserScript(source: PageScripts.game, injectionTime: .atDocumentEnd, forMainFrameOnly: false))
+            if site.fps {
+                controller.addUserScript(WKUserScript(source: PageScripts.fps, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+            }
         }
         if !site.css.isEmpty {
             controller.addUserScript(WKUserScript(source: PageScripts.userCSS(site.css), injectionTime: .atDocumentEnd, forMainFrameOnly: true))
@@ -465,10 +469,11 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
         webView.findInteraction?.presentFindNavigator(showingReplace: false)
     }
 
-    func captureSnapshot() async {
+    /// `fresh` waits for the next screen update (sharper, but slower); tab switches skip it so they feel instant.
+    func captureSnapshot(fresh: Bool = true) async {
         guard url != nil, webView.window != nil else { return }
         let configuration = WKSnapshotConfiguration()
-        configuration.afterScreenUpdates = true
+        configuration.afterScreenUpdates = fresh
         configuration.snapshotWidth = NSNumber(value: 420)
         if let image = try? await webView.takeSnapshot(configuration: configuration) {
             snapshot = image
@@ -519,8 +524,9 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
                 guard let tab = self else { return }
                 Task { @MainActor in tab.updateBottomInset() }
             },
-            webView.scrollView.observe(\.bounds) { [weak self] _, _ in
-                guard let tab = self else { return }
+            // Bounds change on every scroll frame; only a size change matters here.
+            webView.scrollView.observe(\.bounds, options: [.old, .new]) { [weak self] _, change in
+                guard let tab = self, change.oldValue?.size != change.newValue?.size else { return }
                 Task { @MainActor in tab.updateBottomInset() }
             },
             webView.scrollView.observe(\.contentOffset, options: [.old, .new]) { [weak self] _, change in

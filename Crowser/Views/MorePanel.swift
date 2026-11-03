@@ -59,6 +59,25 @@ struct MorePanel: View {
                         ActionTile(speaker.isSpeaking ? "Stop" : "Read aloud", symbol: speaker.isSpeaking ? "stop.fill" : "speaker.wave.2", highlighted: speaker.isSpeaking, enabled: hasPage || speaker.isSpeaking) {
                             tab.readAloud()
                         }
+                        ActionTile("Commands", symbol: "command") {
+                            after { store.sheet = .palette }
+                        }
+                        ActionTile("Float video", symbol: "pip.enter", enabled: hasPage) {
+                            dismiss()
+                            tab.pictureInPicture()
+                        }
+                        ActionTile("Look up", symbol: "character.book.closed", enabled: hasPage) {
+                            after { tab.define() }
+                        }
+                        ActionTile("Group", symbol: "rectangle.stack.badge.plus", enabled: !tab.isPrivate) {
+                            after {
+                                Task {
+                                    if let name = await Presenter.prompt(title: "New group", message: "Starts a group with this tab", defaultText: nil) {
+                                        store.createGroup(named: name, with: tab)
+                                    }
+                                }
+                            }
+                        }
                         ActionTile("PDF", symbol: "doc.richtext", enabled: hasPage) {
                             after { tab.saveAsPDF() }
                         }
@@ -252,6 +271,9 @@ struct MorePanel: View {
                     if tab.gameMode {
                         SwitchRow("Lock page scrolling", detail: "Dragging only moves the game, never the page.", symbol: "lock.fill", isOn: tab.scrollLocked) {
                             tab.toggleScrollLock()
+                        }
+                        SwitchRow("FPS counter", detail: "Frame rate and recent low, in the top-left corner.", symbol: "speedometer", isOn: tab.showsFPS) {
+                            tab.toggleFPS()
                         }
                     }
                     SwitchRow("Dark page", detail: "Turns light pages dark. Photos stay natural.", symbol: "moon.fill", isOn: tab.darkPage) {

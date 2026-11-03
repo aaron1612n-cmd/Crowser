@@ -16,6 +16,8 @@ struct SiteSetting: Codable, Equatable {
     /// Your own styles and script for this site.
     var css = ""
     var js = ""
+    /// Frame counter overlay (game mode).
+    var fps = false
 
     init() {}
 
@@ -31,6 +33,7 @@ struct SiteSetting: Codable, Equatable {
         darkPage = try c.decodeIfPresent(Bool.self, forKey: .darkPage)
         css = try c.decodeIfPresent(String.self, forKey: .css) ?? ""
         js = try c.decodeIfPresent(String.self, forKey: .js) ?? ""
+        fps = try c.decodeIfPresent(Bool.self, forKey: .fps) ?? false
     }
 }
 

@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UIKit
 
@@ -113,6 +114,13 @@ final class Prefs: ObservableObject {
     @Published var showFavorites: Bool { didSet { save(showFavorites, "showFavorites") } }
     @Published var showRecent: Bool { didSet { save(showRecent, "showRecent") } }
     @Published var swipeTabs: Bool { didSet { save(swipeTabs, "swipeTabs") } }
+    /// Web audio and video keep playing in the background and picture in picture works across apps.
+    @Published var backgroundAudio: Bool {
+        didSet {
+            save(backgroundAudio, "backgroundAudio")
+            try? AVAudioSession.sharedInstance().setCategory(backgroundAudio ? .playback : .ambient, mode: backgroundAudio ? .moviePlayback : .default)
+        }
+    }
 
     // MARK: Shields (defaults for every site; each site can drop them)
 
@@ -154,6 +162,7 @@ final class Prefs: ObservableObject {
         showFavorites = bool("showFavorites", true)
         showRecent = bool("showRecent", true)
         swipeTabs = bool("swipeTabs", true)
+        backgroundAudio = bool("backgroundAudio", true)
         if let data = d.data(forKey: "crowser.pref.shortcuts"),
            let saved = try? JSONDecoder().decode([SearchShortcut].self, from: data) {
             shortcuts = saved

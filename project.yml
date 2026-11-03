@@ -7,8 +7,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.5.2"
-    CURRENT_PROJECT_VERSION: "7"
+    MARKETING_VERSION: "0.6.0"
+    CURRENT_PROJECT_VERSION: "8"
 targets:
   Crowser:
     type: application
@@ -53,6 +53,8 @@ targets:
         NSPhotoLibraryAddUsageDescription: Lets you save images from web pages to your photo library.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoadsInWebContent: true
+        UIBackgroundModes:
+          - audio
         LSApplicationQueriesSchemes:
           - mailto
           - tel

@@ -52,6 +52,7 @@ struct BrowserView: View {
                 case .more: MorePanel()
                 case .shields: ShieldsSheet()
                 case .siteCode: SiteCodeSheet()
+                case .palette: CommandPalette()
                 }
             }
             .environmentObject(store)

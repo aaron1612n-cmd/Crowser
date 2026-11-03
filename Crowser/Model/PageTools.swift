@@ -89,6 +89,54 @@ extension BrowserTab {
         }
     }
 
+    // MARK: Picture in picture
+
+    func pictureInPicture() {
+        webView.evaluateJavaScript(PageScripts.pictureInPicture) { [weak self] result, _ in
+            Task { @MainActor in
+                switch result as? String {
+                case "ok": Haptics.tap()
+                case "none": self?.store?.showToast("No video on this page")
+                default: self?.store?.showToast("Start the video, then try again")
+                }
+            }
+        }
+    }
+
+    // MARK: Dictionary
+
+    /// Looks up the selected word, or asks for one when nothing is selected.
+    func define() {
+        webView.evaluateJavaScript(PageScripts.selectedText) { result, _ in
+            Task { @MainActor in
+                var term = (result as? String) ?? ""
+                if term.isEmpty {
+                    term = await Presenter.prompt(title: "Look up", message: "Select a word on the page, or type one", defaultText: nil) ?? ""
+                }
+                term = term.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !term.isEmpty else { return }
+                Presenter.present(UIReferenceLibraryViewController(term: term))
+            }
+        }
+    }
+
+    // MARK: FPS counter
+
+    var showsFPS: Bool { store?.sites.setting(for: url).fps ?? false }
+
+    func toggleFPS() {
+        let on = !showsFPS
+        store?.sites.update(url) { $0.fps = on }
+        rebuildUserScripts()
+        if on {
+            webView.evaluateJavaScript(PageScripts.fps, completionHandler: nil)
+        } else {
+            webView.evaluateJavaScript("window.__crowserFPS=false;var f=document.getElementById('crowser-fps');if(f)f.remove();", completionHandler: nil)
+        }
+        objectWillChange.send()
+        Haptics.select()
+    }
+
     // MARK: Hide elements
 
     func toggleZapper() {

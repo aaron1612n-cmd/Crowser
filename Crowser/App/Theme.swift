@@ -39,6 +39,9 @@ enum Theme {
         $0.userInterfaceStyle == .dark ? .hex(0xFFFFFF, alpha: 0.09) : .hex(0x000000, alpha: 0.08)
     })
 
+    /// Tab group colors: earthy, distinct from each other, none of them the accent.
+    static let groupTones: [Color] = ([0x5E8C3A, 0xC9932B, 0x2F7F86, 0x8E3B6E, 0x8C4A2F, 0x5D6A9E] as [UInt32]).map { Color(uiColor: .hex($0)) }
+
     /// Muted earth tones for letter tiles when a site has no icon.
     static let tileTones: [Color] = ([0x8C4A2F, 0x5D6A4C, 0x4C5966, 0x8A6D3B, 0x6A4C5D, 0x3F5F5A] as [UInt32]).map { Color(uiColor: .hex($0)) }
 
@@ -94,25 +97,35 @@ enum Motion {
     static var quick: Animation { .easeOut(duration: Look.reduceMotion ? 0.1 : 0.18) }
 }
 
+/// Haptics reuse warmed-up generators so the tap lands on the same frame as the touch.
+@MainActor
 enum Haptics {
+    private static let light: UIImpactFeedbackGenerator = { let g = UIImpactFeedbackGenerator(style: .light); g.prepare(); return g }()
+    private static let medium: UIImpactFeedbackGenerator = { let g = UIImpactFeedbackGenerator(style: .medium); g.prepare(); return g }()
+    private static let selection: UISelectionFeedbackGenerator = { let g = UISelectionFeedbackGenerator(); g.prepare(); return g }()
+    private static let notice = UINotificationFeedbackGenerator()
+
     static func tap() {
         guard Look.haptics else { return }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        light.impactOccurred()
+        light.prepare()
     }
 
     static func thud() {
         guard Look.haptics else { return }
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        medium.impactOccurred()
+        medium.prepare()
     }
 
     static func select() {
         guard Look.haptics else { return }
-        UISelectionFeedbackGenerator().selectionChanged()
+        selection.selectionChanged()
+        selection.prepare()
     }
 
     static func success() {
         guard Look.haptics else { return }
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        notice.notificationOccurred(.success)
     }
 }
 
