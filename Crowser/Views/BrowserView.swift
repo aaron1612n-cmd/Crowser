@@ -80,13 +80,25 @@ private struct TabStage: View {
 
     var body: some View {
         ZStack(alignment: barOnTop ? .top : .bottom) {
-            // The page and the bar sit one above the other; the bar never covers the page.
-            // (Covering it meant padding every page, which made pages that should stay still scrollable.)
-            VStack(spacing: 0) {
-                if barOnTop && !tab.gameMode { barSlot }
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if !barOnTop && !tab.gameMode { barSlot }
+            Group {
+            if barOnTop {
+                // Wide screens: bar above, page below.
+                VStack(spacing: 0) {
+                    if !tab.gameMode { barSlot }
+                    content
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            } else {
+                // Phones: the page runs all the way to the bottom edge and the bar floats over it,
+                // so the page shows around and under the bar. The web view only pads its bottom when
+                // the page is long enough to scroll, so pages that fit stay perfectly still.
+                ZStack(alignment: .bottom) {
+                    content
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .ignoresSafeArea(edges: tab.showsStartPage ? [] : .bottom)
+                    if !tab.gameMode { barSlot }
+                }
+            }
             }
             // The web view moves its own content out of the keyboard's way. Letting SwiftUI shrink the
             // page at the same time made two movements fight, which showed as a jitter.
@@ -148,14 +160,18 @@ private struct TabStage: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: barOnTop ? (compact ? 56 : 66) : (collapsed ? 44 : (compact ? 54 : 64)), alignment: barOnTop ? .top : .bottom)
-        .background(Theme.paper.ignoresSafeArea(edges: barOnTop ? .top : .bottom))
+        .background {
+            if barOnTop { Theme.paper.ignoresSafeArea(edges: .top) }
+        }
         .animation(Motion.snappy, value: collapsed)
+        .onAppear { tab.setBottomObstruction(barOnTop ? 0 : (compact ? 54 : 64)) }
+        .onChange(of: barOnTop) { top in tab.setBottomObstruction(top ? 0 : (compact ? 54 : 64)) }
     }
 
     @ViewBuilder
     private var content: some View {
         if tab.showsStartPage {
-            StartPage(isPrivate: tab.isPrivate, bottomClearance: 24)
+            StartPage(isPrivate: tab.isPrivate, bottomClearance: barOnTop ? 24 : 96)
         } else {
             WebViewContainer(webView: tab.webView)
                 .overlay {

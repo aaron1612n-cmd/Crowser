@@ -71,6 +71,8 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
 
     private var observations: [NSKeyValueObservation] = []
     private var scrollRun: CGFloat = 0
+    /// Height of the floating bar covering the bottom of the page (phones).
+    private var bottomObstruction: CGFloat = 0
     private var downloads: [ObjectIdentifier: URL] = [:]
     /// Restored tabs wait to load until you actually look at them, so launch stays instant.
     private var needsLoad = false
@@ -214,6 +216,26 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
     }
 
     func setReader(_ on: Bool) { readerOn = on }
+
+    func setBottomObstruction(_ height: CGFloat) {
+        guard bottomObstruction != height else { return }
+        bottomObstruction = height
+        updateBottomInset()
+    }
+
+    /// Pads the bottom so the last bit of a long page can scroll out from under the bar.
+    /// Pages that already fit get no padding, so they can't be dragged.
+    private func updateBottomInset() {
+        let scrollView = webView.scrollView
+        let safeBottom = scrollView.safeAreaInsets.bottom
+        let visible = scrollView.bounds.height - scrollView.safeAreaInsets.top - safeBottom
+        let needs = bottomObstruction > 0 && scrollView.contentSize.height > visible - bottomObstruction + 1
+        let inset: CGFloat = needs ? bottomObstruction : 0
+        if scrollView.contentInset.bottom != inset { scrollView.contentInset.bottom = inset }
+        if scrollView.verticalScrollIndicatorInsets.bottom != bottomObstruction {
+            scrollView.verticalScrollIndicatorInsets.bottom = bottomObstruction
+        }
+    }
     func setZapping(_ on: Bool) { zapping = on }
 
     /// Called when the tab closes.
@@ -493,6 +515,14 @@ final class BrowserTab: NSObject, ObservableObject, Identifiable {
             webView.observe(\.canGoBack) { view, change in refresh(view, change) },
             webView.observe(\.canGoForward) { view, change in refresh(view, change) },
             webView.observe(\.hasOnlySecureContent) { view, change in refresh(view, change) },
+            webView.scrollView.observe(\.contentSize) { [weak self] _, _ in
+                guard let tab = self else { return }
+                Task { @MainActor in tab.updateBottomInset() }
+            },
+            webView.scrollView.observe(\.bounds) { [weak self] _, _ in
+                guard let tab = self else { return }
+                Task { @MainActor in tab.updateBottomInset() }
+            },
             webView.scrollView.observe(\.contentOffset, options: [.old, .new]) { [weak self] _, change in
                 guard let tab = self, let old = change.oldValue?.y, let new = change.newValue?.y, old != new else { return }
                 Task { @MainActor in tab.scrolled(from: old, to: new) }
