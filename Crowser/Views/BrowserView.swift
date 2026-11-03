@@ -88,6 +88,9 @@ private struct TabStage: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if !barOnTop && !tab.gameMode { barSlot }
             }
+            // The web view moves its own content out of the keyboard's way. Letting SwiftUI shrink the
+            // page at the same time made two movements fight, which showed as a jitter.
+            .ignoresSafeArea(.keyboard, edges: .bottom)
 
             if tab.gameMode { gameOverlay }
 
