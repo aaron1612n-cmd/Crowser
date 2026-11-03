@@ -96,17 +96,17 @@ struct CommandPalette: View {
         let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
         let all = commands + tabCommands + favoriteCommands
         guard !needle.isEmpty else { return commands }
-        var matches = all.filter { matches($0, needle) }
+        var found = all.filter { matches($0, needle) }
         if let url = Address.resolve(query) {
             let isSearch = Address.shortcut(in: query) != nil || SearchEngine.allCases.contains { $0.url(for: query) == url }
-            matches.append(Command(
+            found.append(Command(
                 id: "go",
                 title: isSearch ? "Search for “\(query)”" : "Open \(Address.display(url))",
                 symbol: isSearch ? "magnifyingglass" : "arrow.up.right",
                 run: { store.open(url) }
             ))
         }
-        return matches
+        return found
     }
 
     /// Every word typed must appear somewhere in the title, detail or keywords.
